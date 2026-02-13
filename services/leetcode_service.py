@@ -17,12 +17,6 @@ def get_lc_summary(sn, name, regno, dept, user):
         query getUser($username: String!) {
 
           matchedUser(username: $username) {
-            submitStats {
-              acSubmissionNum {
-                difficulty
-                count
-              }
-            }
             profile {
               ranking
             }
@@ -42,7 +36,6 @@ def get_lc_summary(sn, name, regno, dept, user):
             problemsSolved
             ranking
           }
-
         }
         """,
         "variables": {"username": user}
@@ -60,74 +53,89 @@ def get_lc_summary(sn, name, regno, dept, user):
 
         if "data" not in data or not data["data"]:
             print("LC error:", data)
-            return None
+            return ab_row(sn, name, regno, dept)
 
         mu = data["data"].get("matchedUser")
         if not mu:
             print("LC user not found:", user)
-            return None
-
-        stats = mu["submitStats"]["acSubmissionNum"]
-
-        easy = stats[1]["count"]
-        med = stats[2]["count"]
-        hard = stats[3]["count"]
+            return ab_row(sn, name, regno, dept)
 
         contest_summary = data["data"].get("userContestRanking") or {}
+        history = data["data"].get("userContestRankingHistory") or []
 
+        # ---------- Contest Summary ----------
         contest_rating = contest_summary.get("rating")
-        contest_count = contest_summary.get("attendedContestsCount")
         top_pct = contest_summary.get("topPercentage")
 
         if contest_rating is not None:
             contest_rating = round(contest_rating, 2)
-
-        if contest_count in (None, 0):
+        else:
             contest_rating = "AB"
-            contest_count = "AB"
+
+        if top_pct is None:
             top_pct = "AB"
 
-        history = data["data"].get("userContestRankingHistory") or []
-
-        last_contest_name = "AB"
-        last_contest_date = "AB"
-        last_contest_solved = "AB"
-        last_contest_rank = "AB"
+        # ---------- Latest Contest ----------
+        contest_name = "AB"
+        contest_date = "AB"
+        contest_solved = "AB"
 
         for entry in reversed(history):
-
             if not entry:
                 continue
-
             if entry.get("problemsSolved") is None:
                 continue
 
-            last_contest_name = entry["contest"]["title"]
-            last_contest_date = epoch_to_ddmmyyyy(
-                entry["contest"]["startTime"]
-            )
-            last_contest_solved = entry["problemsSolved"]
-            last_contest_rank = entry.get("ranking", "AB")
-
+            contest_name = entry["contest"]["title"]
+            contest_date = epoch_to_ddmmyyyy(entry["contest"]["startTime"])
+            contest_solved = entry["problemsSolved"]
             break
 
+        if contest_solved == 0:
+            contest_solved = "AB"
+
+        # ---------- Global Rank ----------
+        global_rank = mu["profile"].get("ranking", "AB")
+
+        # ---------- Return Row (NEW FORMAT) ----------
         return {
             "S. No": sn,
             "Name of the Student": name,
             "Register No.": regno,
             "Dept": dept,
-            "Date": last_contest_date,
-            "Leet Code Easy": easy,
-            "Leet Code Medium": med,
-            "Leet Code Hard": hard,
-            "Total(No.of Problem Solved)": easy + med + hard,
-            "Contest count": contest_count,
+            "Date": contest_date,
+
+            # contest-only difficulty split not available → AB
+            "Leet Code Easy": "AB",
+            "Leet Code Medium": "AB",
+            "Leet Code Hard": "AB",
+
+            "Total(No.of Problem Solved)": contest_solved,
+            "Contest count": contest_name,   # ← REQUIRED CHANGE
             "Contest Rating": contest_rating,
-            "Global Rank": mu["profile"].get("ranking"),
+            "Global Rank": global_rank,
             "Top": top_pct
         }
 
     except Exception as e:
         print("LC exception:", e)
-        print("Oops! Looks like you have entered something wrong or the server is down")
-        return None
+        return ab_row(sn, name, regno, dept)
+
+
+# ---------- AB SAFE FALLBACK ----------
+def ab_row(sn, name, regno, dept):
+    return {
+        "S. No": sn,
+        "Name of the Student": name,
+        "Register No.": regno,
+        "Dept": dept,
+        "Date": "AB",
+        "Leet Code Easy": "AB",
+        "Leet Code Medium": "AB",
+        "Leet Code Hard": "AB",
+        "Total(No.of Problem Solved)": "AB",
+        "Contest count": "AB",
+        "Contest Rating": "AB",
+        "Global Rank": "AB",
+        "Top": "AB"
+    }
