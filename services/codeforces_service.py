@@ -1,29 +1,47 @@
 import requests
-from utils.date_utils import today_ddmmyyyy
 
 
 def get_cf_summary(sn, name, regno, dept, handle):
 
+    row = {
+        "S. No": sn,
+        "Name of the Student": name,
+        "Problem Solved": "AB",
+        "Current Rank": "AB",
+        "Current Rating": "AB",
+        "Max. Rating": "AB",
+        "Max. Ranking": "AB"
+    }
+
     try:
-        info_resp = requests.get(
+        r = requests.get(
             f"https://codeforces.com/api/user.info?handles={handle}",
-            timeout=10
-        ).json()
+            timeout=15
+        )
 
-        if info_resp.get("status") != "OK":
-            return None
+        data = r.json()
+        if data.get("status") != "OK":
+            print("CF info failed:", handle)
+            return row
 
-        info = info_resp["result"][0]
+        info = data["result"][0]
 
-        subs_resp = requests.get(
+        row["Current Rank"] = info.get("rank", "AB")
+        row["Current Rating"] = info.get("rating", "AB")
+        row["Max. Rating"] = info.get("maxRating", "AB")
+        row["Max. Ranking"] = info.get("maxRank", "AB")
+
+        # ---------- submissions ----------
+        r = requests.get(
             f"https://codeforces.com/api/user.status?handle={handle}",
-            timeout=10
-        ).json()
+            timeout=15
+        )
 
-        if subs_resp.get("status") != "OK":
-            return None
+        data = r.json()
+        if data.get("status") != "OK":
+            return row
 
-        subs = subs_resp["result"]
+        subs = data["result"]
 
         solved = len({
             (s["problem"]["contestId"], s["problem"]["index"])
@@ -32,23 +50,10 @@ def get_cf_summary(sn, name, regno, dept, handle):
             and s.get("author", {}).get("participantType") == "CONTESTANT"
         })
 
-        if solved == 0:
-            solved = "AB"
+        row["Problem Solved"] = solved or "AB"
 
-        return {
-            "S. No": sn,
-            "Name of the Student": name,
-            "Register No.": regno,
-            "Dept": dept,
-            "Date": today_ddmmyyyy(),
-            "Problem Solved (6)": solved,
-            "Current Rank": info.get("rank") or "AB",
-            "Current Rating": info.get("rating") or "AB",
-            "Max. Rating": info.get("maxRating") or "AB",
-            "Max. Ranking": info.get("maxRank") or "AB"
-        }
+        return row
 
     except Exception as e:
         print("CF error:", e)
-        print("Oops! Looks like you have entered something wrong or the server is down")
-        return None
+        return row

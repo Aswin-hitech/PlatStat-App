@@ -8,8 +8,17 @@ from utils.excel_writer import build_excel
 
 app = Flask(__name__)
 
-cache_tables = {"codeforces": [], "codechef": [], "leetcode": []}
+# cache last generated tables for download
+cache_tables = {
+    "codeforces": [],
+    "codechef": [],
+    "leetcode": []
+}
 
+
+# =====================================================
+# MAIN PAGE
+# =====================================================
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -22,45 +31,87 @@ def index():
 
         csv_file = request.files.get("csvfile")
 
+        # ---------------------------------------------
+        # INPUT SOURCE — CSV OR FORM
+        # ---------------------------------------------
+
         if csv_file and csv_file.filename:
             rows = parse_csv(csv_file)
         else:
             rows = [{
-                "name": request.form.get("name"),
-                "register_no": request.form.get("register_no"),
-                "department": request.form.get("department"),
-                "codeforces": request.form.get("codeforces"),
-                "codechef": request.form.get("codechef"),
-                "leetcode": request.form.get("leetcode"),
+                "name": request.form.get("name", "").strip(),
+                "register_no": request.form.get("register_no", "").strip(),
+                "department": request.form.get("department", "").strip(),
+                "codeforces": request.form.get("codeforces", "").strip(),
+                "codechef": request.form.get("codechef", "").strip(),
+                "leetcode": request.form.get("leetcode", "").strip(),
             }]
+
+        # ---------------------------------------------
+        # PROCESS EACH STUDENT
+        # ---------------------------------------------
 
         for i, row in enumerate(rows, start=1):
 
-            if not row or not row.get("name"):
+            if not row:
                 continue
 
-            name = row.get("name")
-            regno = row.get("register_no")
-            dept = row.get("department")
+            name = (row.get("name") or "").strip()
+            if not name:
+                continue
+
+            regno = (row.get("register_no") or "").strip()
+            dept = (row.get("department") or "").strip()
 
             codeforces_id = (row.get("codeforces") or "").strip()
             codechef_id = (row.get("codechef") or "").strip()
             leetcode_id = (row.get("leetcode") or "").strip()
 
+            # -------------------------
+            # Codeforces
+            # -------------------------
+
             if codeforces_id:
-                r = get_cf_summary(i, name, regno, dept, codeforces_id)
-                if r:
-                    codeforces_table.append(r)
+                try:
+                    r = get_cf_summary(
+                        i, name, regno, dept, codeforces_id
+                    )
+                    if r:
+                        codeforces_table.append(r)
+                except Exception as e:
+                    print("CF call failed:", e)
+
+            # -------------------------
+            # CodeChef
+            # -------------------------
 
             if codechef_id:
-                r = get_cc_summary(i, name, regno, dept, codechef_id)
-                if r:
-                    codechef_table.append(r)
+                try:
+                    r = get_cc_summary(
+                        i, name, regno, dept, codechef_id
+                    )
+                    if r:
+                        codechef_table.append(r)
+                except Exception as e:
+                    print("CC call failed:", e)
+
+            # -------------------------
+            # LeetCode
+            # -------------------------
 
             if leetcode_id:
-                r = get_lc_summary(i, name, regno, dept, leetcode_id)
-                if r:
-                    leetcode_table.append(r)
+                try:
+                    r = get_lc_summary(
+                        i, name, regno, dept, leetcode_id
+                    )
+                    if r:
+                        leetcode_table.append(r)
+                except Exception as e:
+                    print("LC call failed:", e)
+
+        # ---------------------------------------------
+        # CACHE RESULTS
+        # ---------------------------------------------
 
         global cache_tables
         cache_tables = {
@@ -69,6 +120,10 @@ def index():
             "leetcode": leetcode_table
         }
 
+        # ---------------------------------------------
+        # SHOW RESULTS
+        # ---------------------------------------------
+
         return render_template(
             "results.html",
             codeforces=codeforces_table,
@@ -76,8 +131,13 @@ def index():
             leetcode=leetcode_table
         )
 
+    # GET request
     return render_template("index.html")
 
+
+# =====================================================
+# DOWNLOAD EXCEL
+# =====================================================
 
 @app.route("/download")
 def download():
@@ -93,6 +153,10 @@ def download():
 
     return send_file(file_path, as_attachment=True)
 
+
+# =====================================================
+# RUN
+# =====================================================
 
 if __name__ == "__main__":
     app.run(debug=True)
