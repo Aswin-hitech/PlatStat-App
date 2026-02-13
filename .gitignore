@@ -1,0 +1,49 @@
+# ---------------------------
+# Python cache
+# ---------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ---------------------------
+# Virtual environments
+# ---------------------------
+venv/
+.env/
+.venv/
+
+# ---------------------------
+# Flask / runtime
+# ---------------------------
+instance/
+*.log
+
+# ---------------------------
+# Output files (YOUR NEED)
+# ---------------------------
+Output/
+
+# ---------------------------
+# Excel & data files
+# ---------------------------
+*.xlsx
+*.xls
+*.csv
+
+# If you want to KEEP one sample CSV, comment above and use:
+# !sample.csv
+
+# ---------------------------
+# OS / Editor
+# ---------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ---------------------------
+# Build artifacts
+# ---------------------------
+dist/
+build/

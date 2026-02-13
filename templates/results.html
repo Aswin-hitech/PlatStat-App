@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PlatStat - Results</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+
+<body>
+
+    <div class="wide-card">
+        <h2>Results</h2>
+
+        <a href="/download"><button>Download Excel</button></a>
+
+        {% for title, table in [("CodeChef", cc), ("LeetCode", lc), ("Codeforces", cf)] %}
+
+        <h3>{{ title }}</h3>
+
+        {% if table and table|length > 0 %}
+
+        <table>
+            <tr>
+                {% for k in table[0].keys() %}
+                <th>{{ k }}</th>
+                {% endfor %}
+            </tr>
+
+            {% for row in table %}
+            <tr>
+                {% for v in row.values() %}
+                <td>{{ v }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </table>
+
+        {% else %}
+        <p>No data found</p>
+        {% endif %}
+
+        {% endfor %}
+    </div>
+
+</body>
+
+</html>
