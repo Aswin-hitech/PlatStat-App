@@ -4,36 +4,39 @@
 <head>
     <title>PlatStat - Results</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
-<body>
+<body class="results-page">
 
     <div class="wide-card">
         <h2>Results</h2>
 
         <a href="/download"><button>Download Excel</button></a>
 
-        {% for title, table in [("CodeChef", cc), ("LeetCode", lc), ("Codeforces", cf)] %}
+        {% for title, table in [("CodeChef", codechef), ("LeetCode", leetcode), ("Codeforces", codeforces)] %}
 
         <h3>{{ title }}</h3>
 
         {% if table and table|length > 0 %}
 
-        <table>
-            <tr>
-                {% for k in table[0].keys() %}
-                <th>{{ k }}</th>
-                {% endfor %}
-            </tr>
+        <div class="table-wrapper">
+            <table>
+                <tr>
+                    {% for k in table[0].keys() %}
+                    <th>{{ k }}</th>
+                    {% endfor %}
+                </tr>
 
-            {% for row in table %}
-            <tr>
-                {% for v in row.values() %}
-                <td>{{ v }}</td>
+                {% for row in table %}
+                <tr>
+                    {% for v in row.values() %}
+                    <td>{{ v }}</td>
+                    {% endfor %}
+                </tr>
                 {% endfor %}
-            </tr>
-            {% endfor %}
-        </table>
+            </table>
+        </div>
 
         {% else %}
         <p>No data found</p>

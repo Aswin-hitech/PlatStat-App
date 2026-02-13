@@ -8,7 +8,7 @@ from utils.excel_writer import build_excel
 
 app = Flask(__name__)
 
-cache_tables = {"cf": [], "cc": [], "lc": []}
+cache_tables = {"codeforces": [], "codechef": [], "leetcode": []}
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -16,9 +16,9 @@ def index():
 
     if request.method == "POST":
 
-        cf_table = []
-        cc_table = []
-        lc_table = []
+        codeforces_table = []
+        codechef_table = []
+        leetcode_table = []
 
         csv_file = request.files.get("csvfile")
 
@@ -29,9 +29,9 @@ def index():
                 "name": request.form.get("name"),
                 "register_no": request.form.get("register_no"),
                 "department": request.form.get("department"),
-                "cf": request.form.get("cf"),
-                "cc": request.form.get("cc"),
-                "lc": request.form.get("lc"),
+                "codeforces": request.form.get("codeforces"),
+                "codechef": request.form.get("codechef"),
+                "leetcode": request.form.get("leetcode"),
             }]
 
         for i, row in enumerate(rows, start=1):
@@ -43,37 +43,37 @@ def index():
             regno = row.get("register_no")
             dept = row.get("department")
 
-            cf_id = (row.get("cf") or "").strip()
-            cc_id = (row.get("cc") or "").strip()
-            lc_id = (row.get("lc") or "").strip()
+            codeforces_id = (row.get("codeforces") or "").strip()
+            codechef_id = (row.get("codechef") or "").strip()
+            leetcode_id = (row.get("leetcode") or "").strip()
 
-            if cf_id:
-                r = get_cf_summary(i, name, regno, dept, cf_id)
+            if codeforces_id:
+                r = get_cf_summary(i, name, regno, dept, codeforces_id)
                 if r:
-                    cf_table.append(r)
+                    codeforces_table.append(r)
 
-            if cc_id:
-                r = get_cc_summary(i, name, regno, dept, cc_id)
+            if codechef_id:
+                r = get_cc_summary(i, name, regno, dept, codechef_id)
                 if r:
-                    cc_table.append(r)
+                    codechef_table.append(r)
 
-            if lc_id:
-                r = get_lc_summary(i, name, regno, dept, lc_id)
+            if leetcode_id:
+                r = get_lc_summary(i, name, regno, dept, leetcode_id)
                 if r:
-                    lc_table.append(r)
+                    leetcode_table.append(r)
 
         global cache_tables
         cache_tables = {
-            "cf": cf_table,
-            "cc": cc_table,
-            "lc": lc_table
+            "codeforces": codeforces_table,
+            "codechef": codechef_table,
+            "leetcode": leetcode_table
         }
 
         return render_template(
             "results.html",
-            cf=cf_table,
-            cc=cc_table,
-            lc=lc_table
+            codeforces=codeforces_table,
+            codechef=codechef_table,
+            leetcode=leetcode_table
         )
 
     return render_template("index.html")
@@ -86,9 +86,9 @@ def download():
         return "No data to download."
 
     file_path = build_excel(
-        cache_tables["cf"],
-        cache_tables["cc"],
-        cache_tables["lc"]
+        cache_tables["codeforces"],
+        cache_tables["codechef"],
+        cache_tables["leetcode"]
     )
 
     return send_file(file_path, as_attachment=True)

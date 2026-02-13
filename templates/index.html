@@ -4,6 +4,7 @@
 <head>
     <title>PlatStat</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
 <body>
@@ -19,13 +20,32 @@
             <input name="register_no" placeholder="Register No">
             <input name="department" placeholder="Department">
 
-            <input name="cf" placeholder="Codeforces ID">
-            <input name="cc" placeholder="CodeChef ID">
-            <input name="lc" placeholder="LeetCode ID">
+            <input name="codeforces" placeholder="Codeforces ID">
+            <input name="codechef" placeholder="CodeChef ID">
+            <input name="leetcode" placeholder="LeetCode ID">
 
             <hr>
 
             <h3>Bulk Upload (CSV)</h3>
+
+            <div class="info-card">
+                <div class="info-header">
+                    <span class="info-icon">ℹ️</span>
+                    <strong>CSV Format Guide</strong>
+                </div>
+                <div class="info-content">
+                    <p>Your CSV file must include the following columns:</p>
+                    <ul>
+                        <li><code>name</code> - Student name</li>
+                        <li><code>register_no</code> - Registration number</li>
+                        <li><code>department</code> - Department name</li>
+                        <li><code>codechef</code> - CodeChef username</li>
+                        <li><code>codeforces</code> - Codeforces username</li>
+                        <li><code>leetcode</code> - LeetCode username</li>
+                    </ul>
+                </div>
+            </div>
+
             <p>If CSV is uploaded, form fields are ignored.</p>
 
             <input type="file" name="csvfile">
