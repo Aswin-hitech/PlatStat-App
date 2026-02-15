@@ -1,60 +1,95 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>PlatStat</title>
     <link rel="stylesheet" href="/static/styles.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
 
+    <style>
+        /* Simple navbar */
+        .navbar{
+            width:100%;
+            background:#111;
+            padding:12px 20px;
+            box-sizing:border-box;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+        }
+
+        .nav-title{
+            color:white;
+            font-weight:600;
+            font-size:18px;
+        }
+
+        .nav-links a{
+            color:white;
+            text-decoration:none;
+            margin-left:18px;
+            font-size:14px;
+            padding:6px 10px;
+            border-radius:6px;
+            transition:0.2s;
+        }
+
+        .nav-links a:hover{
+            background:#2d7ef7;
+        }
+    </style>
+</head>
 <body>
 
-    <div class="card">
-        <h2>PlatStat</h2>
+<!-- ================= NAVBAR ================= -->
+<div class="navbar">
+    <div class="nav-title">PlatStat</div>
 
-        <form method="POST" enctype="multipart/form-data">
-
-            <h3>Single Student</h3>
-
-            <input name="name" placeholder="Student Name">
-            <input name="register_no" placeholder="Register No">
-            <input name="department" placeholder="Department">
-
-            <input name="codeforces" placeholder="Codeforces ID">
-            <input name="codechef" placeholder="CodeChef ID">
-            <input name="leetcode" placeholder="LeetCode ID">
-
-            <hr>
-
-            <h3>Bulk Upload (CSV)</h3>
-
-            <div class="info-card">
-                <div class="info-header">
-                    <span class="info-icon">ℹ️</span>
-                    <strong>CSV Format Guide</strong>
-                </div>
-                <div class="info-content">
-                    <p>Your CSV file must include the following columns:</p>
-                    <ul>
-                        <li><code>name</code> - Student name</li>
-                        <li><code>register_no</code> - Registration number</li>
-                        <li><code>department</code> - Department name</li>
-                        <li><code>codeforces</code> - Codeforces username</li>
-                        <li><code>codechef</code> - CodeChef username</li>
-                        <li><code>leetcode</code> - LeetCode username</li>
-                    </ul>
-                </div>
-            </div>
-
-            <p>If CSV is uploaded, form fields are ignored.</p>
-
-            <input type="file" name="csvfile">
-
-            <button type="submit">Analyze</button>
-
-        </form>
+    <div class="nav-links">
+        <a href="/">Analyzer</a>
+        <a href="/topper">Topper Calculator</a>
     </div>
+</div>
+
+<!-- ================= MAIN CARD ================= -->
+
+<div class="card">
+<h2>PlatStat Analyzer</h2>
+
+<form method="POST" action="/" enctype="multipart/form-data">
+
+<h3>Platforms to Track</h3>
+
+<label><input type="checkbox" name="platform_codeforces" checked> Codeforces</label><br>
+<label><input type="checkbox" name="platform_codechef" checked> CodeChef</label><br>
+<label><input type="checkbox" name="platform_leetcode" checked> LeetCode</label>
+
+<hr>
+
+<h3>Single Student</h3>
+
+<input name="name" placeholder="Student Name">
+<input name="register_no" placeholder="Register No">
+<input name="department" placeholder="Department">
+
+<input name="codeforces" placeholder="Codeforces ID">
+<input name="codechef" placeholder="CodeChef ID">
+<input name="leetcode" placeholder="LeetCode ID">
+
+<hr>
+
+<h3>Bulk Upload (CSV)</h3>
+
+<p><b>CSV Headers Required:</b></p>
+<pre>name,register_no,department,codeforces,codechef,leetcode</pre>
+
+<p>If CSV uploaded → form fields ignored</p>
+
+<input type="file" name="csvfile">
+
+<button type="submit">Analyze</button>
+
+</form>
+</div>
 
 </body>
-
 </html>

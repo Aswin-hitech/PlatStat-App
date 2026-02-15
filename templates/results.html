@@ -16,9 +16,11 @@
 
         {% for title, table in [("CodeChef", codechef), ("LeetCode", leetcode), ("Codeforces", codeforces)] %}
 
+        {% if table is not none %}
+
         <h3>{{ title }}</h3>
 
-        {% if table and table|length > 0 %}
+        {% if table|length > 0 %}
 
         <div class="table-wrapper">
             <table>
@@ -40,6 +42,8 @@
 
         {% else %}
         <p>No data found</p>
+        {% endif %}
+
         {% endif %}
 
         {% endfor %}

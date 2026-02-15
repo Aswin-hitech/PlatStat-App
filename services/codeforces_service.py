@@ -1,11 +1,14 @@
 import requests
+from utils.date_utils import today_ddmmyyyy
 
 
-def get_cf_summary(sn, name, regno, dept, handle):
-
-    row = {
+def ab_row(sn,name,regno,dept):
+    return {
         "S. No": sn,
         "Name of the Student": name,
+        "Register No": regno,
+        "Dept": dept,
+        "Date": today_ddmmyyyy(),
         "Problem Solved": "AB",
         "Current Rank": "AB",
         "Current Rating": "AB",
@@ -13,47 +16,50 @@ def get_cf_summary(sn, name, regno, dept, handle):
         "Max. Ranking": "AB"
     }
 
+
+def get_cf_summary(sn,name,regno,dept,handle):
+
     try:
-        r = requests.get(
+        info=requests.get(
             f"https://codeforces.com/api/user.info?handles={handle}",
-            timeout=15
-        )
+            timeout=15).json()
 
-        data = r.json()
-        if data.get("status") != "OK":
-            print("CF info failed:", handle)
-            return row
+        if info.get("status")!="OK":
+            return ab_row(sn,name,regno,dept)
 
-        info = data["result"][0]
+        user=info["result"][0]
 
-        row["Current Rank"] = info.get("rank", "AB")
-        row["Current Rating"] = info.get("rating", "AB")
-        row["Max. Rating"] = info.get("maxRating", "AB")
-        row["Max. Ranking"] = info.get("maxRank", "AB")
-
-        # ---------- submissions ----------
-        r = requests.get(
+        subs=requests.get(
             f"https://codeforces.com/api/user.status?handle={handle}",
-            timeout=15
-        )
+            timeout=15).json()
 
-        data = r.json()
-        if data.get("status") != "OK":
-            return row
+        if subs.get("status")!="OK":
+            return ab_row(sn,name,regno,dept)
 
-        subs = data["result"]
+        solved=set()
 
-        solved = len({
-            (s["problem"]["contestId"], s["problem"]["index"])
-            for s in subs
-            if s.get("verdict") == "OK"
-            and s.get("author", {}).get("participantType") == "CONTESTANT"
-        })
+        for s in subs["result"]:
+            if s.get("verdict")=="OK" and \
+               s.get("author",{}).get("participantType")=="CONTESTANT":
+                p=s.get("problem",{})
+                if p.get("contestId") and p.get("index"):
+                    solved.add((p["contestId"],p["index"]))
 
-        row["Problem Solved"] = solved or "AB"
+        solved=len(solved) if solved else "AB"
 
-        return row
+        return {
+            "S. No": sn,
+            "Name of the Student": name,
+            "Register No": regno,
+            "Dept": dept,
+            "Date": today_ddmmyyyy(),
+            "Problem Solved": solved,
+            "Current Rank": user.get("rank","AB"),
+            "Current Rating": user.get("rating","AB"),
+            "Max. Rating": user.get("maxRating","AB"),
+            "Max. Ranking": user.get("maxRank","AB")
+        }
 
     except Exception as e:
-        print("CF error:", e)
-        return row
+        print("CF error:",e)
+        return ab_row(sn,name,regno,dept)
