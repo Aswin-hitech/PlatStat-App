@@ -17,6 +17,50 @@ cache_tables = {
     "leetcode": []
 }
 
+def find_latest_lc_contest(rows):
+
+    import requests
+
+    latest_title = None
+    latest_time = 0
+
+    for row in rows:
+
+        username = (row.get("leetcode") or "").strip()
+        if not username:
+            continue
+
+        query = {
+            "query": """
+            query($u:String!){
+              userContestRankingHistory(username:$u){
+                contest{title startTime}
+                problemsSolved
+              }
+            }
+            """,
+            "variables": {"u": username}
+        }
+
+        try:
+            data = requests.post(
+                "https://leetcode.com/graphql",
+                json=query,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10
+            ).json()["data"]
+
+            hist = data.get("userContestRankingHistory") or []
+
+            for h in hist:
+                if h["contest"]["startTime"] and h["contest"]["startTime"] > latest_time:
+                    latest_time = h["contest"]["startTime"]
+                    latest_title = h["contest"]["title"]
+
+        except:
+            continue
+
+    return latest_title, latest_time
 
 # =====================================================
 # MAIN PAGE
@@ -92,13 +136,30 @@ def index():
                 print("CC failed:", e)
 
         # ---------------- LeetCode ----------------
+        # ----------- Find GLOBAL latest LC contest -----------
+        latest_lc_title = None
+        latest_lc_time = None
+
+        if use_lc:
+            latest_lc_title, latest_lc_time = find_latest_lc_contest(rows)
+
+        # ---------------- LeetCode ----------------
         if use_lc and row.get("leetcode"):
             try:
-                r = get_lc_summary(i, name, regno, dept, row.get("leetcode").strip())
+                r = get_lc_summary(
+                    i,
+                    name,
+                    regno,
+                    dept,
+                    row.get("leetcode").strip(),
+                    latest_lc_title,
+                    latest_lc_time
+                )
                 if r:
                     leetcode_table.append(r)
             except Exception as e:
                 print("LC failed:", e)
+
 
     # ---------- CACHE ----------
     global cache_tables
@@ -182,6 +243,31 @@ def topper():
         error = str(e)
 
     return render_template("topper.html", result=result, error=error)
+
+
+# =====================================================
+# GLOBAL ERROR HANDLING
+# =====================================================
+
+@app.errorhandler(500)
+def internal_error(e):
+    return render_template(
+        "index.html", 
+        error="A critical error occurred. Please check your input or try again later."
+    ), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # pass through HTTP errors
+    if hasattr(e, 'code') and e.code < 500:
+        return e
+    
+    # now you're handling non-HTTP exceptions only
+    print("Unhandled Exception:", e)
+    return render_template(
+        "index.html", 
+        error=f"Unsuspected error: {str(e)}"
+    ), 500
 
 
 # =====================================================

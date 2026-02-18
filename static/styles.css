@@ -405,6 +405,32 @@ input[type="file"]:hover {
     background: rgba(224, 242, 254, 0.7);
 }
 
+/* Error Alert Styling */
+.error-alert {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #fecaca;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(153, 27, 27, 0.1);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 /* Mobile responsive styles */
 @media (max-width: 768px) {
     body {

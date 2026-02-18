@@ -12,6 +12,12 @@
     <div class="wide-card">
         <h2>Results</h2>
 
+        {% if error %}
+        <div class="error-alert">
+            {{ error }}
+        </div>
+        {% endif %}
+
         <a href="/download"><button>Download Excel</button></a>
 
         {% for title, table in [("CodeChef", codechef), ("LeetCode", leetcode), ("Codeforces", codeforces)] %}

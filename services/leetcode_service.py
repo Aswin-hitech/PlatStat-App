@@ -3,29 +3,16 @@ from datetime import datetime
 import re
 
 
-# ==============================
-# GLOBAL VARIABLES
-# ==============================
-LATEST_CONTEST_TITLE = None
-LATEST_CONTEST_START = None
-LATEST_CONTEST_TYPE = None   # Weekly / Biweekly
-
-
-# ==============================
-# DEFAULT ABSENT ROW
-# ==============================
 def ab_row(sn, name, regno, dept):
     return {
         "S. No": sn,
         "Name of the Student": name,
         "Register No": regno,
         "Dept": dept,
-        "Contest Type": LATEST_CONTEST_TYPE if LATEST_CONTEST_TYPE else "AB",
-        "Contest Name": LATEST_CONTEST_TITLE if LATEST_CONTEST_TITLE else "AB",
         "Date": "AB",
         "Leet Code Easy": "AB",
         "Leet Code Medium": "AB",
-        "Leet Code Hard": "AB",
+        "Leet code Hard": "AB",
         "Total(No.of Problem Solved)": "AB",
         "Contest count": "AB",
         "Contest Rating": "AB",
@@ -34,9 +21,6 @@ def ab_row(sn, name, regno, dept):
     }
 
 
-# ==============================
-# HELPER FUNCTIONS
-# ==============================
 def to_date(ts):
     return datetime.fromtimestamp(ts).strftime("%d.%m.%Y") if ts else "AB"
 
@@ -47,79 +31,14 @@ def extract_no(title):
 
 
 def split_by_contest_total(n):
-    if n == 1: return 1, 0, 0
-    if n == 2: return 1, 1, 0
-    if n == 3: return 1, 2, 0
-    if n >= 4: return 1, 2, 1
-    return "AB", "AB", "AB"
+    if n == 1: return 1,0,0
+    if n == 2: return 1,1,0
+    if n == 3: return 1,2,0
+    if n >= 4: return 1,2,1
+    return "AB","AB","AB"
 
 
-def detect_contest_type(title):
-    if "Weekly" in title:
-        return "Weekly"
-    if "Biweekly" in title:
-        return "Biweekly"
-    return "Other"
-
-
-# ==============================
-# GET LATEST WEEKLY / BIWEEKLY
-# ==============================
-def get_latest_contest():
-    global LATEST_CONTEST_TITLE, LATEST_CONTEST_START, LATEST_CONTEST_TYPE
-
-    query = {
-        "query": """
-        query {
-          allContests {
-            title
-            startTime
-          }
-        }
-        """
-    }
-
-    try:
-        data = requests.post(
-            "https://leetcode.com/graphql",
-            json=query,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15
-        ).json()["data"]
-
-        contests = data.get("allContests", [])
-
-        # Filter Weekly / Biweekly only
-        filtered = [
-            c for c in contests
-            if "Weekly" in c["title"] or "Biweekly" in c["title"]
-        ]
-
-        if not filtered:
-            return
-
-        # Pick latest by startTime
-        latest = max(filtered, key=lambda x: x["startTime"])
-
-        LATEST_CONTEST_TITLE = latest["title"]
-        LATEST_CONTEST_START = latest["startTime"]
-
-        if "Weekly" in LATEST_CONTEST_TITLE:
-            LATEST_CONTEST_TYPE = "Weekly"
-        else:
-            LATEST_CONTEST_TYPE = "Biweekly"
-
-        print("Latest Contest Detected:", LATEST_CONTEST_TITLE)
-
-    except Exception as e:
-        print("Error fetching latest contest:", e)
-
-
-
-# ==============================
-# MAIN FUNCTION
-# ==============================
-def get_lc_summary(sn, name, regno, dept, user):
+def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, latest_contest_time=None):
 
     query = {
         "query": """
@@ -141,67 +60,66 @@ def get_lc_summary(sn, name, regno, dept, user):
     }
 
     try:
-        response = requests.post(
+        data = requests.post(
             "https://leetcode.com/graphql",
             json=query,
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=15
-        )
+        ).json()["data"]
 
-        data = response.json()["data"]
         mu = data["matchedUser"]
-
         if not mu:
-            return ab_row(sn, name, regno, dept)
+            return ab_row(sn,name,regno,dept)
 
-        # Profile totals
+        # profile totals
         stats = mu["submitStats"]["acSubmissionNum"]
-        easy = stats[1]["count"]
-        med = stats[2]["count"]
-        hard = stats[3]["count"]
-        profile_total = easy + med + hard
+        easy,med,hard = stats[1]["count"],stats[2]["count"],stats[3]["count"]
+        profile_total = easy+med+hard
 
-        # Contest rating
         cs = data.get("userContestRanking") or {}
         rating = round(cs["rating"]) if cs.get("rating") else "AB"
-        top = cs.get("topPercentage", "AB")
+        top = cs.get("topPercentage","AB")
 
-        # Contest history
         hist = data.get("userContestRankingHistory") or []
 
-        # Find participation in latest contest
-        target = next(
-            (h for h in hist if h["contest"]["title"] == LATEST_CONTEST_TITLE),
-            None
-        )
+        # --------------------------
+        # Find participation in GLOBAL latest contest
+        # --------------------------
+        participated = None
+        for h in hist:
+            if latest_contest_title and h["contest"]["title"] == latest_contest_title:
+                participated = h
+                break
 
-        # If not attended → ABSENT
-        if not target:
-            return ab_row(sn, name, regno, dept)
+        # If participated
+        if participated:
+            total = participated["problemsSolved"]
+            date = to_date(latest_contest_time)
+            contest_no = extract_no(latest_contest_title)
+            lc_easy,lc_med,lc_hard = split_by_contest_total(total)
 
-        total = target["problemsSolved"]
-        date = to_date(LATEST_CONTEST_START)
-        contest_no = extract_no(LATEST_CONTEST_TITLE)
-        lc_easy, lc_med, lc_hard = split_by_contest_total(total)
+        else:
+            total = "AB"
+            date = to_date(latest_contest_time) if latest_contest_time else "AB"
+            contest_no = extract_no(latest_contest_title) if latest_contest_title else "AB"
+            lc_easy,lc_med,lc_hard = "AB","AB","AB"
 
         return {
             "S. No": sn,
             "Name of the Student": name,
             "Register No": regno,
             "Dept": dept,
-            "Contest Type": LATEST_CONTEST_TYPE,
-            "Contest Name": LATEST_CONTEST_TITLE,
             "Date": date,
             "Leet Code Easy": lc_easy,
             "Leet Code Medium": lc_med,
-            "Leet Code Hard": lc_hard,
+            "Leet code Hard": lc_hard,
             "Total(No.of Problem Solved)": total,
             "Contest count": contest_no,
             "Contest Rating": rating,
-            "Global Rank": mu["profile"].get("ranking", "AB"),
+            "Global Rank": mu["profile"].get("ranking","AB"),
             "Top": top
         }
 
     except Exception as e:
-        print("LC error:", e)
-        return ab_row(sn, name, regno, dept)
+        print("LC error:",e)
+        return ab_row(sn,name,regno,dept)
