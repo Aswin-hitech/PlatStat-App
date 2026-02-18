@@ -71,8 +71,9 @@ def get_latest_contest():
     query = {
         "query": """
         query {
-          userContestRankingHistory(username:"leetcode"){
-            contest{title startTime}
+          allContests {
+            title
+            startTime
           }
         }
         """
@@ -86,21 +87,33 @@ def get_latest_contest():
             timeout=15
         ).json()["data"]
 
-        history = data.get("userContestRankingHistory", [])
+        contests = data.get("allContests", [])
 
-        # Traverse from latest to oldest
-        for h in reversed(history):
-            title = h["contest"]["title"]
+        # Filter Weekly / Biweekly only
+        filtered = [
+            c for c in contests
+            if "Weekly" in c["title"] or "Biweekly" in c["title"]
+        ]
 
-            # Only Weekly or Biweekly
-            if "Weekly" in title or "Biweekly" in title:
-                LATEST_CONTEST_TITLE = title
-                LATEST_CONTEST_START = h["contest"]["startTime"]
-                LATEST_CONTEST_TYPE = detect_contest_type(title)
-                break
+        if not filtered:
+            return
+
+        # Pick latest by startTime
+        latest = max(filtered, key=lambda x: x["startTime"])
+
+        LATEST_CONTEST_TITLE = latest["title"]
+        LATEST_CONTEST_START = latest["startTime"]
+
+        if "Weekly" in LATEST_CONTEST_TITLE:
+            LATEST_CONTEST_TYPE = "Weekly"
+        else:
+            LATEST_CONTEST_TYPE = "Biweekly"
+
+        print("Latest Contest Detected:", LATEST_CONTEST_TITLE)
 
     except Exception as e:
         print("Error fetching latest contest:", e)
+
 
 
 # ==============================
