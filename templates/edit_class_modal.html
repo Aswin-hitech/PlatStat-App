@@ -4,15 +4,39 @@
     <h2>Edit Class</h2>
     <form id="editClassForm">
       <input type="hidden" name="classId" id="editClassId" />
-      <label>Class Name*:<br><input type="text" name="className" id="editClassName" required></label><br>
-      <label>Academic Year*:<br><input type="text" name="academicYear" id="editAcademicYear" required></label><br>
-      <label>Department*:<br><input type="text" name="department" id="editDepartment" required></label><br>
-      <label>College*:<br><input type="text" name="college" id="editCollege" required></label><br>
-      <label>Section:<br><input type="text" name="section" id="editSection"></label><br>
-      <label>Description:<br><textarea name="description" id="editDescription"></textarea></label><br>
-      <label>Created By:<br><input type="text" name="createdBy" id="editCreatedBy"></label><br>
-      <label>Academic Batch:<br><input type="text" name="academicBatch" id="editAcademicBatch"></label><br>
-      <div style="margin-top:15px;">
+      <div class="form-group">
+        <label for="editClassName">Class Name <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="editClassName" name="className" placeholder="e.g., AIML 3rd Year" required />
+      </div>
+      <div class="form-group">
+        <label for="editAcademicYear">Academic Year <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="editAcademicYear" name="academicYear" placeholder="e.g., 3rd Year" required />
+      </div>
+      <div class="form-group">
+        <label for="editDepartment">Department <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="editDepartment" name="department" placeholder="e.g., Computer Science" required />
+      </div>
+      <div class="form-group">
+        <label for="editCollege">College <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="editCollege" name="college" placeholder="e.g., NPIT" required />
+      </div>
+      <div class="form-group">
+        <label for="editSection">Section (optional)</label>
+        <input type="text" id="editSection" name="section" placeholder="e.g., A" />
+      </div>
+      <div class="form-group">
+        <label for="editDescription">Description (optional)</label>
+        <textarea id="editDescription" name="description" placeholder="Brief description of the class" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="editCreatedBy">Created By (optional)</label>
+        <input type="text" id="editCreatedBy" name="createdBy" placeholder="Your name" />
+      </div>
+      <div class="form-group">
+        <label for="editAcademicBatch">Academic Batch (optional)</label>
+        <input type="text" id="editAcademicBatch" name="academicBatch" placeholder="e.g., 2023-2024" />
+      </div>
+      <div style="margin-top:15px;display:flex;gap:10px;justify-content:flex-end;">
         <button type="button" class="ghost-button" onclick="closeEditClassModal()">Cancel</button>
         <button type="submit" class="primary-button">Save</button>
       </div>

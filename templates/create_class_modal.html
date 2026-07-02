@@ -3,15 +3,39 @@
   <div class="modal-content" style="background:#1e1e2f;padding:20px;border-radius:10px;max-width:600px;width:90%;">
     <h2>Create New Class</h2>
     <form id="createClassForm">
-      <label>Class Name*:<br><input type="text" name="className" required></label><br>
-      <label>Academic Year*:<br><input type="text" name="academicYear" required></label><br>
-      <label>Department*:<br><input type="text" name="department" required></label><br>
-      <label>College*:<br><input type="text" name="college" required></label><br>
-      <label>Section:<br><input type="text" name="section"></label><br>
-      <label>Description:<br><textarea name="description"></textarea></label><br>
-      <label>Created By:<br><input type="text" name="createdBy"></label><br>
-      <label>Academic Batch:<br><input type="text" name="academicBatch"></label><br>
-      <div style="margin-top:15px;">
+      <div class="form-group">
+        <label for="className">Class Name <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="className" name="className" placeholder="e.g., AIML 3rd Year" required />
+      </div>
+      <div class="form-group">
+        <label for="academicYear">Academic Year <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="academicYear" name="academicYear" placeholder="e.g., 3rd Year" required />
+      </div>
+      <div class="form-group">
+        <label for="department">Department <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="department" name="department" placeholder="e.g., Computer Science" required />
+      </div>
+      <div class="form-group">
+        <label for="college">College <span style="color:#ff6b6b;">*</span></label>
+        <input type="text" id="college" name="college" placeholder="e.g., NPIT" required />
+      </div>
+      <div class="form-group">
+        <label for="section">Section (optional)</label>
+        <input type="text" id="section" name="section" placeholder="e.g., A" />
+      </div>
+      <div class="form-group">
+        <label for="description">Description (optional)</label>
+        <textarea id="description" name="description" placeholder="Brief description of the class" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="createdBy">Created By (optional)</label>
+        <input type="text" id="createdBy" name="createdBy" placeholder="Your name" />
+      </div>
+      <div class="form-group">
+        <label for="academicBatch">Academic Batch (optional)</label>
+        <input type="text" id="academicBatch" name="academicBatch" placeholder="e.g., 2023-2024" />
+      </div>
+      <div style="margin-top:15px;display:flex;gap:10px;justify-content:flex-end;">
         <button type="button" class="ghost-button" onclick="closeCreateClassModal()">Cancel</button>
         <button type="submit" class="primary-button">Create</button>
       </div>

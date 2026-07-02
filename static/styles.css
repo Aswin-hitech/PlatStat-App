@@ -631,4 +631,36 @@ input[type="file"]:hover {
         padding: 14px 16px;
         font-size: 14px;
     }
+
+/* Modal and Form Group Styles */
+.modal {
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: #1e1e2f;
+  padding: 20px;
+  border-radius: 10px;
+  max-width: 600px;
+  width: 90%;
+  color: #e0e7ff;
+}
+.form-group {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+}
+.form-group label {
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: #e0e7ff;
+}
 }
