@@ -5,8 +5,12 @@ from db import store
 
 
 class BaseRepository:
-    def __init__(self, collection):
-        self.collection = collection
+    def __init__(self, collection_name):
+        self.collection_name = collection_name
+
+    @property
+    def collection(self):
+        return store.collection(self.collection_name)
 
     def create(self, doc):
         now = datetime.utcnow()
@@ -27,7 +31,7 @@ class BaseRepository:
 
 class ClassRepository(BaseRepository):
     def __init__(self):
-        super().__init__(store.classes)
+        super().__init__("classes")
 
     def create_class(self, data):
         class_id = data.get("classId") or str(uuid.uuid4())
@@ -46,7 +50,7 @@ class ClassRepository(BaseRepository):
 
 class StudentRepository(BaseRepository):
     def __init__(self):
-        super().__init__(store.students)
+        super().__init__("students")
 
     def create_student(self, data):
         student_id = data.get("studentId") or str(uuid.uuid4())
@@ -65,7 +69,7 @@ class StudentRepository(BaseRepository):
 
 class JobRepository(BaseRepository):
     def __init__(self):
-        super().__init__(store.jobs)
+        super().__init__("jobs")
 
     def create_job(self, data):
         job_id = data.get("jobId") or str(uuid.uuid4())
@@ -90,7 +94,7 @@ class JobRepository(BaseRepository):
 
 class StatRepository(BaseRepository):
     def __init__(self):
-        super().__init__(store.platform_stats)
+        super().__init__("platform_stats")
 
     def append_snapshot(self, payload):
         payload.setdefault("fetchDate", datetime.utcnow())
@@ -102,7 +106,7 @@ class StatRepository(BaseRepository):
 
 class RankingRepository(BaseRepository):
     def __init__(self):
-        super().__init__(store.rankings)
+        super().__init__("rankings")
 
     def upsert_snapshot(self, payload):
         return self.update_one(
@@ -118,5 +122,4 @@ class RankingRepository(BaseRepository):
 
 class HistoryRepository(BaseRepository):
     def __init__(self):
-        super().__init__(store.fetch_history)
-
+        super().__init__("fetch_history")

@@ -44,6 +44,12 @@ class FetchEngine:
         })
         return job
 
+    def _persist_job(self, job):
+        job["updatedAt"] = datetime.utcnow()
+        job_repo.update_one({"jobId": job["jobId"]}, job, upsert=True)
+        self._job_cache[job["jobId"]] = job
+        return job
+
     def get_job(self, job_id):
         if job_id in self._job_cache:
             return self._job_cache[job_id]
@@ -72,12 +78,20 @@ class FetchEngine:
         return platforms
 
     def _build_profile_url(self, platform, platform_id, row):
-        return (
+        if row.get(f"{platform}_url") or row.get("profile_url") or row.get("profileLink"):
+            return (
             row.get(f"{platform}_url")
             or row.get("profile_url")
             or row.get("profileLink")
             or ""
         )
+        if platform == "codeforces":
+            return f"https://codeforces.com/profile/{platform_id}"
+        if platform == "codechef":
+            return f"https://www.codechef.com/users/{platform_id}"
+        if platform == "leetcode":
+            return f"https://leetcode.com/u/{platform_id}"
+        return ""
 
     def _call_scraper(self, platform, row, idx):
         name = (row.get("studentName") or row.get("name") or "").strip()
@@ -143,72 +157,108 @@ class FetchEngine:
         })
         return FetchResult(ok=False, error=f"Failed {platform}:{platform_id}")
 
-    def run_job(self, job):
-        rows = job.get("rows", [])
-        class_id = job.get("classId", "")
-        job["status"] = "running"
-        job["startedAt"] = job.get("startedAt") or datetime.utcnow()
-        job["rows"] = rows
-        job_repo.update_one({"jobId": job["jobId"]}, job, upsert=True)
-        start = time.time()
+    def _prepare_rows(self, rows):
         seen = set()
-        results = []
-        processed = success = failed = skipped = 0
-
-        for idx, row in enumerate(rows, start=1):
-            if job.get("cancelled"):
-                break
+        prepared = []
+        for row in rows:
             for platform in self._platforms_for_row(row):
                 platform_id = (row.get(platform) or "").strip()
-                dedupe_key = f"{platform}:{platform_id}"
-                if dedupe_key in seen:
-                    skipped += 1
+                key = f"{platform}:{platform_id}"
+                if key in seen:
                     continue
-                seen.add(dedupe_key)
-                job["currentStudent"] = row.get("studentName") or row.get("name") or ""
-                job["currentPlatformId"] = platform_id
-                job["processed"] = processed
-                job["success"] = success
-                job["failed"] = failed
-                job["remaining"] = max(0, len(rows) - processed)
-                job["updatedAt"] = datetime.utcnow()
-                job_repo.update_one({"jobId": job["jobId"]}, job, upsert=True)
+                seen.add(key)
+                prepared.append((row, platform))
+        return prepared
 
-                result = self._run_single(platform, row, idx, class_id)
-                processed += 1
-                if result.ok:
-                    success += 1
-                    results.append(result.data)
-                else:
-                    failed += 1
+    def process_job_step(self, job_id):
+        job = self.get_job(job_id)
+        if not job or job.get("status") in {"completed", "cancelled"}:
+            return job
+        rows = job.get("rows", [])
+        prepared = job.get("_prepared")
+        if prepared is None:
+            prepared = self._prepare_rows(rows)
+            job["_prepared"] = prepared
+            job["_cursor"] = 0
+        cursor = job.get("_cursor", 0)
+        batch_size = max(1, int(settings.BATCH_SIZE))
+        batch = prepared[cursor: cursor + batch_size]
+        if not batch:
+            job["status"] = "completed"
+            job["finishedAt"] = datetime.utcnow()
+            self._persist_job(job)
+            compute_rankings()
+            return job
 
-                time.sleep(1 / max(settings.MAX_CONCURRENT_FETCHES, 1))
+        job["status"] = "running"
+        processed = job.get("processed", 0)
+        success = job.get("success", 0)
+        failed = job.get("failed", 0)
+        skipped = job.get("skipped", 0)
+        results = job.get("results", [])
+        started_at = job.get("startedAt") or datetime.utcnow()
+        job["startedAt"] = started_at
 
-        elapsed = time.time() - start
+        for row, platform in batch:
+            if job.get("cancelled"):
+                break
+            platform_id = (row.get(platform) or "").strip()
+            idx = processed + 1
+            job["currentStudent"] = row.get("studentName") or row.get("name") or ""
+            job["currentPlatformId"] = platform_id
+            job["currentPlatform"] = platform
+            self._persist_job(job)
+            result = self._run_single(platform, row, idx, job.get("classId", ""))
+            processed += 1
+            if result.ok:
+                success += 1
+                results.append(result.data)
+            else:
+                failed += 1
+            time.sleep(1 / max(settings.MAX_CONCURRENT_FETCHES, 1))
+
+        job["rows"] = rows
+        job["_prepared"] = prepared
+        job["_cursor"] = cursor + len(batch)
         job["processed"] = processed
         job["success"] = success
         job["failed"] = failed
         job["skipped"] = skipped
-        job["elapsedSeconds"] = elapsed
-        job["etaSeconds"] = 0
-        job["status"] = "cancelled" if job.get("cancelled") else "completed"
-        job["finishedAt"] = datetime.utcnow()
-        job_repo.update_one({"jobId": job["jobId"]}, job, upsert=True)
+        job["remaining"] = max(0, len(prepared) - job["_cursor"])
+        job["elapsedSeconds"] = max(0, (datetime.utcnow() - started_at).total_seconds())
+        total_done = max(processed, 1)
+        job["rpm"] = round((success + failed) / max(job["elapsedSeconds"] / 60, 1), 2)
+        job["etaSeconds"] = max(0, (job["remaining"] * settings.MAX_CONCURRENT_FETCHES))
+        if job.get("cancelled"):
+            job["status"] = "cancelled"
+            job["finishedAt"] = datetime.utcnow()
+        elif job["remaining"] == 0:
+            job["status"] = "completed"
+            job["finishedAt"] = datetime.utcnow()
+            compute_rankings()
+        self._persist_job(job)
 
         history_repo.create({
             "requestId": job["jobId"],
-            "classId": class_id,
+            "classId": job.get("classId", ""),
             "status": job["status"],
             "processed": processed,
             "success": success,
             "failed": failed,
             "skipped": skipped,
-            "elapsedSeconds": elapsed,
+            "elapsedSeconds": job.get("elapsedSeconds", 0),
+            "remaining": job["remaining"],
             "createdAt": datetime.utcnow(),
         })
-        compute_rankings()
-        self._job_cache[job["jobId"]] = job
         job["results"] = results
+        return job
+
+    def run_job(self, job):
+        rows = job.get("rows", [])
+        job["rows"] = rows
+        self._persist_job(job)
+        while job.get("status") not in {"completed", "cancelled"}:
+            job = self.process_job_step(job["jobId"])
         return job
 
     def resume_job(self, job_id):
@@ -218,7 +268,8 @@ class FetchEngine:
         job.setdefault("rows", [])
         job["cancelled"] = False
         job["status"] = "queued"
-        return self.run_job(job)
+        self._persist_job(job)
+        return self.process_job_step(job_id)
 
 
 fetch_engine = FetchEngine()

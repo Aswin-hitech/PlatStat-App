@@ -188,9 +188,9 @@ def index():
 
 @app.route("/dashboard")
 def dashboard():
-    platform_count = len(store.students.find())
-    class_count = len(store.classes.find())
-    fetch_count = len(store.fetch_history.find())
+    platform_count = store.students.count_documents({})
+    class_count = store.classes.count_documents({})
+    fetch_count = store.fetch_history.count_documents({})
     last_fetch = store.fetch_history.find_one(sort=[("createdAt", -1)])
     recent_activity = store.fetch_logs.find(sort=[("createdAt", -1)], limit=10)
     ranking_snapshot = store.rankings.find_one({"metric": "followers", "period": "overall", "snapshotKey": "overall"}) or {}
@@ -245,7 +245,7 @@ def api_fetch():
     if not isinstance(rows, list) or not rows:
         return jsonify({"error": "rows must be a non-empty list"}), 400
     job = fetch_engine.create_job(rows, class_id=class_id)
-    return jsonify({"jobId": job.job_id, "status": job.status}), 202
+    return jsonify({"jobId": job["jobId"], "status": job["status"]}), 202
 
 
 @app.route("/api/batch-fetch", methods=["POST"])
@@ -256,16 +256,34 @@ def api_batch_fetch():
     if class_id and not rows:
         rows = student_repo.find({"classId": class_id})
     job = fetch_engine.create_job(rows, class_id=class_id)
-    result = fetch_engine.run_job(job)
-    compute_rankings()
     return jsonify({
-        "jobId": result["jobId"],
-        "status": result["status"],
-        "processed": result["processed"],
-        "success": result["success"],
-        "failed": result["failed"],
-        "skipped": result["skipped"],
-        "results": result.get("results", []),
+        "jobId": job["jobId"],
+        "status": job["status"],
+        "processed": job.get("processed", 0),
+        "success": job.get("success", 0),
+        "failed": job.get("failed", 0),
+        "skipped": job.get("skipped", 0),
+    })
+
+
+@app.route("/api/jobs/<job_id>/process", methods=["POST"])
+def api_process_job(job_id):
+    job = fetch_engine.process_job_step(job_id)
+    if not job:
+        return jsonify({"error": "job not found"}), 404
+    return jsonify({
+        "jobId": job["jobId"],
+        "status": job["status"],
+        "processed": job.get("processed", 0),
+        "success": job.get("success", 0),
+        "failed": job.get("failed", 0),
+        "skipped": job.get("skipped", 0),
+        "remaining": job.get("remaining", 0),
+        "currentStudent": job.get("currentStudent", ""),
+        "currentPlatform": job.get("currentPlatform", ""),
+        "elapsedSeconds": job.get("elapsedSeconds", 0),
+        "etaSeconds": job.get("etaSeconds", 0),
+        "rpm": job.get("rpm", 0),
     })
 
 
@@ -293,7 +311,7 @@ def api_cancel_fetch(job_id):
     job = fetch_engine.cancel_job(job_id)
     if not job:
         return jsonify({"error": "job not found"}), 404
-    return jsonify({"jobId": job.job_id, "status": job.status})
+    return jsonify({"jobId": job["jobId"], "status": job["status"]})
 
 
 @app.route("/api/fetch/<job_id>/resume", methods=["POST"])
@@ -398,11 +416,12 @@ def api_stats():
     if platform:
         query["platform"] = platform
     if collection == "students":
-        items = store.students.find(query=query, sort=[("createdAt", -1)])
+        total = store.students.count_documents(query)
+        items = store.students.find(query=query, sort=[("createdAt", -1)], skip=skip, limit=page_size)
     else:
-        items = store.platform_stats.find(query=query, sort=[("fetchDate", -1)])
-    total = len(items)
-    return jsonify({"items": items[skip: skip + page_size], "page": page, "pageSize": page_size, "total": total})
+        total = store.platform_stats.count_documents(query)
+        items = store.platform_stats.find(query=query, sort=[("fetchDate", -1)], skip=skip, limit=page_size)
+    return jsonify({"items": list(items), "page": page, "pageSize": page_size, "total": total})
 
 
 @app.route("/api/history", methods=["DELETE"])
