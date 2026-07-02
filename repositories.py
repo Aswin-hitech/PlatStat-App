@@ -15,7 +15,8 @@ class BaseRepository:
     def create(self, doc):
         now = datetime.utcnow()
         payload = {**doc, "createdAt": doc.get("createdAt", now), "updatedAt": now}
-        self.collection.insert_one(payload)
+        result = self.collection.insert_one(payload)
+        payload["_id"] = result.inserted_id
         return payload
 
     def update_one(self, query, payload, upsert=False):

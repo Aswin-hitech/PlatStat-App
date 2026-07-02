@@ -31,13 +31,13 @@
         <div class="class-grid" id="classGrid">
             {% for class_data in classes %}
             <div class="class-card" data-class-name="{{ class_data.className | lower }}" data-department="{{ class_data.department | lower }}" data-college="{{ class_data.college | lower }}" data-academicyear="{{ class_data.academicYear | lower }}">
-                <h3><a href="/class/{{ class_data.classId }}">{{ class_data.className }}</a></h3>
+                <h3><a href="/class/{{ class_data._id }}">{{ class_data.className }}</a></h3>
                 <p class="class-meta">{{ class_data.academicYear }} | {{ class_data.department }}</p>
                 <p class="class-stats">Students: {{ class_data.studentCount }} | Fetches: {{ class_data.totalFetches }}</p>
                 <p class="class-dates">Last Fetch: {{ class_data.lastFetchDate or 'N/A' }}</p>
                 <div class="class-actions">
-                    <a href="/class/{{ class_data.classId }}" class="ghost-button">View Class</a>
-                    <button onclick="confirmDeleteClass(\'{{ class_data.classId }}\')" class="ghost-button delete-button">Delete</button>
+                    <a href="/class/{{ class_data._id }}" class="ghost-button">View Class</a>
+                    <button onclick="confirmDeleteClass('{{ class_data._id }}')" class="ghost-button delete-button">Delete</button>
                 </div>
             </div>
             {% else %}

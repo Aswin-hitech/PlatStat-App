@@ -26,12 +26,12 @@
                 <p>Students: {{ class_data.studentCount }} | Last Fetch: {{ class_data.lastFetchDate or 'N/A' }} | Total Fetches: {{ class_data.totalFetches }}</p>
             </div>
             <div class="hero-actions">
-                <button onclick="openEditClassModal('{{ class_data.classId }}')" class="secondary-button">Edit Class</button>
-                <button onclick="confirmDeleteClass('{{ class_data.classId }}')" class="secondary-button delete-button">Delete Class</button>
+                <button onclick="openEditClassModal('{{ class_data._id }}')" class="secondary-button">Edit Class</button>
+                <button onclick="confirmDeleteClass('{{ class_data._id }}')" class="secondary-button delete-button">Delete Class</button>
                 <button onclick="openAddStudentModal()">Add Student</button>
                 <button onclick="openImportStudentsModal()">Import Students</button>
-                <button onclick="startFetch('{{ class_data.classId }}')">Start Fetch</button>
-                <button onclick="exportStudents('{{ class_data.classId }}')" class="secondary-button">Export Students</button>
+                <button onclick="startFetch('{{ class_data._id }}')">Start Fetch</button>
+                <button onclick="exportStudents('{{ class_data._id }}')" class="secondary-button">Export Students</button>
             </div>
         </div>
 
