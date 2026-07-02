@@ -145,6 +145,21 @@ class MongoCollectionAdapter:
 
 
 class MongoStore:
+    COLLECTION_NAMES = {
+        "users",
+        "classes",
+        "students",
+        "platform_stats",
+        "rankings",
+        "monthly_stats",
+        "weekly_stats",
+        "yearly_stats",
+        "contest_stats",
+        "fetch_history",
+        "jobs",
+        "fetch_logs",
+    }
+
     def __init__(self):
         self.enabled = False
         self.client = None
@@ -187,6 +202,11 @@ class MongoStore:
 
     def collection(self, name):
         return self._collection(name)
+
+    def __getattr__(self, item):
+        if item in self.COLLECTION_NAMES:
+            return self._collection(item)
+        raise AttributeError(item)
 
     def ensure_indexes(self):
         if not self.enabled:

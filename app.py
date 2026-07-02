@@ -191,16 +191,18 @@ def dashboard():
     platform_count = store.students.count_documents({})
     class_count = store.classes.count_documents({})
     fetch_count = store.fetch_history.count_documents({})
-    last_fetch = store.fetch_history.find_one(sort=[("createdAt", -1)])
-    recent_activity = store.fetch_logs.find(sort=[("createdAt", -1)], limit=10)
-    ranking_snapshot = store.rankings.find_one({"metric": "followers", "period": "overall", "snapshotKey": "overall"}) or {}
-    monthly_winner = store.monthly_stats.find_one(sort=[("date", -1)]) or {}
+    running_jobs = store.jobs.count_documents({"status": "running"})
+    last_fetch = store.fetch_history.find_one(sort=[("createdAt", -1)]) or {}
+    recent_activity = list(store.fetch_logs.find(sort=[("createdAt", -1)], limit=10))
+    ranking_snapshot = store.rankings.find_one(sort=[("generatedAt", -1)]) or {}
+    monthly_winner = store.monthly_stats.find_one(sort=[("generatedAt", -1)]) or {}
     return render_template(
         "dashboard.html",
         totals={
             "total_ids": platform_count,
             "total_classes": class_count,
             "total_fetches": fetch_count,
+            "running_jobs": running_jobs,
             "last_fetch": last_fetch,
             "monthly_winner": monthly_winner,
             "top_performer": ranking_snapshot,
@@ -331,19 +333,39 @@ def api_resume_fetch(job_id):
 
 @app.route("/api/rankings")
 def api_rankings():
-    return jsonify({"rankings": store.rankings.find()})
+    period = request.args.get("period")
+    platform = request.args.get("platform")
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    query = {}
+    if period:
+        query["period"] = period
+    if platform:
+        query["platform"] = platform
+    total = store.rankings.count_documents(query)
+    items = list(store.rankings.find(query=query, sort=[("generatedAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
 
 
 @app.route("/api/rankings/history")
 def api_rankings_history():
     period = request.args.get("period", "")
     snapshot_key = request.args.get("snapshotKey", "")
+    platform = request.args.get("platform", "")
     query = {}
     if period:
         query["period"] = period
     if snapshot_key:
         query["snapshotKey"] = snapshot_key
-    return jsonify({"items": store.rankings.find(query=query, sort=[("generatedAt", -1)])})
+    if platform:
+        query["platform"] = platform
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    total = store.rankings.count_documents(query)
+    items = list(store.rankings.find(query=query, sort=[("generatedAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
 
 
 @app.route("/api/profile")
@@ -360,7 +382,7 @@ def api_profile():
 
 @app.route("/api/monthly-winner")
 def api_monthly_winner():
-    doc = store.monthly_stats.find_one(sort=[("date", -1)])
+    doc = store.monthly_stats.find_one(sort=[("generatedAt", -1)])
     if not doc:
         return jsonify({"error": "no monthly stats available"}), 404
     return jsonify(doc)
@@ -368,7 +390,7 @@ def api_monthly_winner():
 
 @app.route("/api/weekly-winner")
 def api_weekly_winner():
-    doc = store.weekly_stats.find_one(sort=[("createdAt", -1)])
+    doc = store.weekly_stats.find_one(sort=[("generatedAt", -1)])
     if not doc:
         return jsonify({"error": "no weekly stats available"}), 404
     return jsonify(doc)
@@ -376,7 +398,7 @@ def api_weekly_winner():
 
 @app.route("/api/yearly-winner")
 def api_yearly_winner():
-    doc = store.yearly_stats.find_one(sort=[("createdAt", -1)])
+    doc = store.yearly_stats.find_one(sort=[("generatedAt", -1)])
     if not doc:
         return jsonify({"error": "no yearly stats available"}), 404
     return jsonify(doc)
@@ -392,12 +414,33 @@ def api_run_monthly():
 
 @app.route("/api/fetch-history")
 def api_fetch_history():
-    return jsonify({"items": store.fetch_history.find(sort=[("createdAt", -1)])})
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    query = {}
+    status = request.args.get("status")
+    class_id = request.args.get("classId")
+    if status:
+        query["status"] = status
+    if class_id:
+        query["classId"] = class_id
+    total = store.fetch_history.count_documents(query)
+    items = list(store.fetch_history.find(query=query, sort=[("createdAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
 
 
 @app.route("/api/jobs")
 def api_jobs():
-    return jsonify({"items": store.jobs.find(sort=[("updatedAt", -1)])})
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    query = {}
+    status = request.args.get("status")
+    if status:
+        query["status"] = status
+    total = store.jobs.count_documents(query)
+    items = list(store.jobs.find(query=query, sort=[("updatedAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
 
 
 @app.route("/api/stats")
