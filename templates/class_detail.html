@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Class Detail - {{ class_data.className }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body class="results-page">
+    <nav class="navbar navbar-glass">
+        <div class="nav-title">PlatStat</div>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/dashboard">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="wide-card">
+        <div class="hero">
+            <div>
+                <p class="eyebrow">Class Management</p>
+                <h2>{{ class_data.className }} ({{ class_data.academicYear }})</h2>
+                <p>{{ class_data.description }}</p>
+                <p>Department: {{ class_data.department }} | College: {{ class_data.college }} {% if class_data.section %}| Section: {{ class_data.section }}{% endif %}</p>
+                <p>Students: {{ class_data.studentCount }} | Last Fetch: {{ class_data.lastFetchDate or 'N/A' }} | Total Fetches: {{ class_data.totalFetches }}</p>
+            </div>
+            <div class="hero-actions">
+                <button onclick="openEditClassModal('{{ class_data.classId }}')" class="secondary-button">Edit Class</button>
+                <button onclick="confirmDeleteClass('{{ class_data.classId }}')" class="secondary-button delete-button">Delete Class</button>
+                <button onclick="openAddStudentModal()">Add Student</button>
+                <button onclick="openImportStudentsModal()">Import Students</button>
+                <button onclick="startFetch('{{ class_data.classId }}')">Start Fetch</button>
+                <button onclick="exportStudents('{{ class_data.classId }}')" class="secondary-button">Export Students</button>
+            </div>
+        </div>
+
+        <h3>Students</h3>
+        {% if students|length > 0 %}
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Register No</th>
+                        <th>Department</th>
+                        <th>Codeforces ID</th>
+                        <th>CodeChef ID</th>
+                        <th>LeetCode ID</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr>
+                        <td>{{ student.studentName }}</td>
+                        <td>{{ student.registerNo }}</td>
+                        <td>{{ student.department }}</td>
+                        <td>{{ student.platformIds.codeforces or student.codeforces or 'N/A' }}</td>
+                        <td>{{ student.platformIds.codechef or student.codechef or 'N/A' }}</td>
+                        <td>{{ student.platformIds.leetcode or student.leetcode or 'N/A' }}</td>
+                        <td>
+                            <button onclick="openEditStudentModal({{ student.studentId|tojson }}, {{ student.studentName|default('')|tojson }}, {{ student.registerNo|default('')|tojson }}, {{ student.department|default('')|tojson }}, {{ student.platformIds.codeforces|default('')|tojson }}, {{ student.platformIds.codechef|default('')|tojson }}, {{ student.platformIds.leetcode|default('')|tojson }})" class="ghost-button">Edit</button>
+                            <button onclick="confirmDeleteStudent('{{ student.studentId }}', '{{ class_data.classId }}')" class="ghost-button delete-button">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p>No students added to this class yet. Use the 'Add Student' or 'Import Students' buttons to get started.</p>
+        {% endif %}
+
+        <!-- Modals will be added here -->
+        {% include 'edit_class_modal.html' %}
+
+    </div>
+
+    <script>
+        function openEditClassModal(classId) {
+            // Fetch class data and populate modal fields
+            fetch(`/api/classes/${classId}`)
+                .then(resp => resp.json())
+                .then(cls => {
+                    document.getElementById('editClassId').value = cls._id || cls.classId || classId;
+                    document.getElementById('editClassName').value = cls.className || '';
+                    document.getElementById('editAcademicYear').value = cls.academicYear || '';
+                    document.getElementById('editDepartment').value = cls.department || '';
+                    document.getElementById('editCollege').value = cls.college || '';
+                    document.getElementById('editSection').value = cls.section || '';
+                    document.getElementById('editDescription').value = cls.description || '';
+                    document.getElementById('editCreatedBy').value = cls.createdBy || '';
+                    document.getElementById('editAcademicBatch').value = cls.academicBatch || '';
+                    document.getElementById('editClassModal').style.display = 'flex';
+                })
+                .catch(err => {
+                    console.error('Error loading class:', err);
+                    alert('Failed to load class data.');
+                });
+        }
+
+        function closeEditClassModal() {
+            document.getElementById('editClassModal').style.display = 'none';
+        }
+
+        document.getElementById('editClassForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const classId = document.getElementById('editClassId').value;
+            const formData = new FormData(this);
+            const data = {};
+            formData.forEach((value, key) => { data[key] = value; });
+            fetch(`/api/classes/${classId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(resp => resp.json())
+            .then(result => {
+                if (result.error) {
+                    alert('Error updating class: ' + result.error);
+                } else {
+                    alert('Class updated successfully.');
+                    closeEditClassModal();
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                console.error('Update error:', err);
+                alert('Failed to update class.');
+            });
+        });
+
+        function confirmDeleteClass(classId) {
+            if (confirm("Are you sure you want to delete this class and all its associated data?")) {
+                fetch(`/api/classes/${classId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'deleted') {
+                        alert('Class deleted successfully.');
+                        window.location.href = '/dashboard'; // Redirect to dashboard after deletion
+                    } else {
+                        alert('Failed to delete class: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting class:', error);
+                    alert('An error occurred while deleting the class.');
+                });
+            }
+        }
+
+        function openAddStudentModal() {
+            alert("Add Student functionality will be implemented here.");
+        }
+
+        function openImportStudentsModal() {
+            alert("Import Students functionality will be implemented here.");
+        }
+
+        function startFetch(classId) {
+            alert("Start Fetch functionality will be implemented here.");
+        }
+
+        function exportStudents(classId) {
+            window.location.href = `/api/classes/${classId}/students/export`;
+        }
+
+        function openEditStudentModal(studentId, studentName, registerNo, department, codeforcesId, codechefId, leetcodeId) {
+            alert(`Edit student ${studentName} functionality will be implemented here.`);
+        }
+
+        function confirmDeleteStudent(studentId, classId) {
+            if (confirm("Are you sure you want to delete this student?")) {
+                fetch(`/api/students/${studentId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'deleted') {
+                        alert('Student deleted successfully.');
+                        window.location.reload(); // Reload the page to reflect changes
+                    } else {
+                        alert('Failed to delete student: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting student:', error);
+                    alert('An error occurred while deleting the student.');
+                });
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -158,7 +158,9 @@ class MongoStore:
         "fetch_history",
         "jobs",
         "fetch_logs",
+        "import_logs",
     }
+
 
     def __init__(self):
         self.enabled = False

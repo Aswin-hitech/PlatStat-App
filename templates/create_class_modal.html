@@ -1,0 +1,20 @@
+<!-- templates/create_class_modal.html -->
+<div id="createClassModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;">
+  <div class="modal-content" style="background:#1e1e2f;padding:20px;border-radius:10px;max-width:600px;width:90%;">
+    <h2>Create New Class</h2>
+    <form id="createClassForm">
+      <label>Class Name*:<br><input type="text" name="className" required></label><br>
+      <label>Academic Year*:<br><input type="text" name="academicYear" required></label><br>
+      <label>Department*:<br><input type="text" name="department" required></label><br>
+      <label>College*:<br><input type="text" name="college" required></label><br>
+      <label>Section:<br><input type="text" name="section"></label><br>
+      <label>Description:<br><textarea name="description"></textarea></label><br>
+      <label>Created By:<br><input type="text" name="createdBy"></label><br>
+      <label>Academic Batch:<br><input type="text" name="academicBatch"></label><br>
+      <div style="margin-top:15px;">
+        <button type="button" class="ghost-button" onclick="closeCreateClassModal()">Cancel</button>
+        <button type="submit" class="primary-button">Create</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -9,47 +9,125 @@
     <nav class="navbar navbar-glass">
         <div class="nav-title">PlatStat</div>
         <div class="nav-links">
-            <a href="/">Analyzer</a>
-            <a href="/topper">Topper Calculator</a>
+            <a href="/">Home</a>
             <a href="/dashboard">Dashboard</a>
+            <a href="/topper">Topper Calculator</a>
         </div>
     </nav>
 
     <div class="wide-card">
         <div class="hero">
             <div>
-                <p class="eyebrow">Analytics overview</p>
-                <h2>Production dashboard</h2>
+                <p class="eyebrow">Class Management</p>
+                <h2>Your Classes</h2>
             </div>
-            <a class="ghost-button" href="/api/rankings" target="_blank">View Rankings JSON</a>
+            <button class="ghost-button" onclick="openCreateClassModal()">+ Create Class</button>
         </div>
 
-        <div class="stat-grid">
-            <div class="stat-card"><span>Total IDs</span><strong>{{ totals.total_ids }}</strong></div>
-            <div class="stat-card"><span>Total Classes</span><strong>{{ totals.total_classes }}</strong></div>
-            <div class="stat-card"><span>Total Fetches</span><strong>{{ totals.total_fetches }}</strong></div>
-            <div class="stat-card"><span>Monthly Winner</span><strong>{{ totals.monthly_winner.winner or 'N/A' }}</strong></div>
-            <div class="stat-card"><span>Top Performer</span><strong>{{ totals.top_performer.metric or 'N/A' }}</strong></div>
+        <div class="search-bar">
+            <input type="text" id="classSearch" placeholder="Search classes..." onkeyup="filterClasses()">
         </div>
 
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr><th>Recent Activity</th><th>Status</th><th>Created</th></tr>
-                </thead>
-                <tbody>
-                    {% for item in totals.recent_activity %}
-                    <tr>
-                        <td>{{ item.type or 'log' }}</td>
-                        <td>{{ item.error or item.status or 'ok' }}</td>
-                        <td>{{ item.createdAt }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="3">No recent activity</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="class-grid" id="classGrid">
+            {% for class_data in classes %}
+            <div class="class-card" data-class-name="{{ class_data.className | lower }}" data-department="{{ class_data.department | lower }}" data-college="{{ class_data.college | lower }}" data-academicyear="{{ class_data.academicYear | lower }}">
+                <h3><a href="/class/{{ class_data.classId }}">{{ class_data.className }}</a></h3>
+                <p class="class-meta">{{ class_data.academicYear }} | {{ class_data.department }}</p>
+                <p class="class-stats">Students: {{ class_data.studentCount }} | Fetches: {{ class_data.totalFetches }}</p>
+                <p class="class-dates">Last Fetch: {{ class_data.lastFetchDate or 'N/A' }}</p>
+                <div class="class-actions">
+                    <a href="/class/{{ class_data.classId }}" class="ghost-button">View Class</a>
+                    <button onclick="confirmDeleteClass(\'{{ class_data.classId }}\')" class="ghost-button delete-button">Delete</button>
+                </div>
+            </div>
+            {% else %}
+            <p>No classes created yet. Click '+ Create Class' to get started.</p>
+            {% endfor %}
         </div>
     </div>
+
+    {% include 'create_class_modal.html' %}
+
+    <script>
+        function openCreateClassModal() {
+            document.getElementById("createClassModal").style.display = "block";
+        }
+
+        function closeCreateClassModal() {
+            document.getElementById("createClassModal").style.display = "none";
+        }
+
+        document.getElementById("createClassForm").addEventListener("submit", function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+
+            fetch("/api/classes", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(data),
+            })
+            .then(response => response.json())
+            .then(cls => {
+                if (cls.error) {
+                    alert("Error: " + cls.error);
+                } else {
+                    alert("Class created successfully!");
+                    closeCreateClassModal();
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error("Error creating class:", error);
+                alert("An error occurred while creating the class.");
+            });
+        });
+
+        function filterClasses() {
+            const searchInput = document.getElementById("classSearch").value.toLowerCase();
+            const classGrid = document.getElementById("classGrid");
+            const classCards = classGrid.getElementsByClassName("class-card");
+
+            for (let i = 0; i < classCards.length; i++) {
+                const card = classCards[i];
+                const className = card.dataset.className;
+                const department = card.dataset.department;
+                const college = card.dataset.college;
+                const academicYear = card.dataset.academicyear;
+
+                if (className.includes(searchInput) || department.includes(searchInput) || college.includes(searchInput) || academicYear.includes(searchInput)) {
+                    card.style.display = "block";
+                } else {
+                    card.style.display = "none";
+                }
+            }
+        }
+
+        function confirmDeleteClass(classId) {
+            if (confirm("Are you sure you want to delete this class and all its associated data?")) {
+                fetch(`/api/classes/${classId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'deleted') {
+                        alert('Class deleted successfully.');
+                        window.location.reload();
+                    } else {
+                        alert('Failed to delete class: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting class:', error);
+                    alert('An error occurred while deleting the class.');
+                });
+            }
+        }
+    </script>
 </body>
 </html>

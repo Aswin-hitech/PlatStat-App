@@ -2,22 +2,27 @@ from flask import Flask, jsonify, render_template, request, send_file
 import pandas as pd
 from datetime import datetime
 from parsers.csv_parser import parse_csv
+from parsers.excel_parser import parse_excel
 from services.codeforces_service import get_cf_summary
 from services.codechef_service import get_cc_summary
 from services.leetcode_service import get_lc_summary
 from services.topper_service import compute_topper
 from utils.excel_writer import build_excel
+from utils.excel_utils import create_excel_file
 from db import store
 from services.fetch_engine import fetch_engine
 from services.ranking_service import compute_rankings
 from services.monthly_service import generate_monthly_report
-from repositories import ClassRepository, StudentRepository, HistoryRepository
+from repositories import HistoryRepository
+from services.class_service import ClassService
+from services.student_service import StudentService
 from utils.ranking_utils import month_key, week_key, year_key
 
 app = Flask(__name__)
-class_repo = ClassRepository()
-student_repo = StudentRepository()
+class_service = ClassService()
+student_service = StudentService()
 history_repo = HistoryRepository()
+
 
 # store last analysis for download
 cache_tables = {
@@ -75,38 +80,268 @@ def find_latest_lc_contest(rows):
 # MAIN PAGE
 # =====================================================
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def index():
+    return render_template("index.html")
 
+
+@app.route("/dashboard")
+def dashboard():
+    classes = class_service.list_classes()
+    return render_template("dashboard.html", classes=classes)
+
+
+@app.route("/class/<class_id>")
+def class_detail(class_id):
+    cls = class_service.get_class(class_id)
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    students, total_students = student_service.find_by_class(class_id)
+    return render_template("class_detail.html", class_data=cls, students=students, total_students=total_students)
+
+
+@app.route("/api/classes", methods=["GET", "POST"])
+def api_classes():
     if request.method == "GET":
-        return render_template("index.html")
+        search_query = request.args.get("search", "")
+        archived = request.args.get("archived", "false").lower() == "true"
+        classes = class_service.list_classes(archived=archived, search=search_query)
+        return jsonify({"items": classes})
+    payload = request.get_json(silent=True) or {}
+    if not payload.get("className"):
+        return jsonify({"error": "className is required"}), 400
+    new_class = class_service.create_class(payload)
+    return jsonify(new_class), 201
 
-    # ---------- PLATFORM SELECTION ----------
-    use_cf = bool(request.form.get("platform_codeforces"))
-    use_cc = bool(request.form.get("platform_codechef"))
-    use_lc = bool(request.form.get("platform_leetcode"))
 
-    # if user selects nothing
-    if not (use_cf or use_cc or use_lc):
-        return render_template("index.html", error="Select at least one platform")
+@app.route("/api/classes/<class_id>", methods=["GET", "PUT", "DELETE"])
+def api_class_detail(class_id):
+    if request.method == "GET":
+        cls = class_service.get_class(class_id)
+        return (jsonify(cls), 200) if cls else (jsonify({"error": "not found"}), 404)
+    if request.method == "DELETE":
+        class_service.delete_class(class_id)
+        return jsonify({"status": "deleted"})
+    payload = request.get_json(silent=True) or {}
+    updated = class_service.update_class(class_id, payload)
+    return jsonify(updated or {"error": "not found"})
 
-    # ---------- INPUT SOURCE ----------
-    csv_file = request.files.get("csvfile")
 
-    if csv_file and csv_file.filename:
-        try:
-            rows = parse_csv(csv_file)
-        except:
-            return render_template("index.html", error="Invalid CSV format")
+@app.route("/api/classes/<class_id>/archive", methods=["POST"])
+def api_archive_class(class_id):
+    updated = class_service.archive_class(class_id)
+    return jsonify(updated or {"error": "not found"})
+
+
+@app.route("/api/classes/<class_id>/restore", methods=["POST"])
+def api_restore_class(class_id):
+    updated = class_service.restore_class(class_id)
+    return jsonify(updated or {"error": "not found"})
+
+
+@app.route("/api/classes/<class_id>/students", methods=["GET", "POST"])
+def api_class_students(class_id):
+    if request.method == "GET":
+        search_query = request.args.get("search", "")
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = max(1, min(int(request.args.get("pageSize", 25)), 100))
+        students, total = student_service.find_by_class(class_id, search_query, page, page_size)
+        return jsonify({"items": students, "total": total, "page": page, "pageSize": page_size})
+    payload = request.get_json(silent=True) or {}
+    if not payload.get("studentName") or not payload.get("registerNo"):
+        return jsonify({"error": "studentName and registerNo are required"}), 400
+    result = student_service.add_single_student(class_id, payload)
+    if result["status"] == "skipped":
+        return jsonify({"error": "Duplicate student", "student": result["student"]}), 409
+    return jsonify(result["student"]), 201
+
+
+@app.route("/api/students/<student_id>", methods=["PUT", "DELETE"])
+def api_student_detail(student_id):
+    if request.method == "PUT":
+        payload = request.get_json(silent=True) or {}
+        updated = student_service.edit_student(student_id, payload)
+        return jsonify(updated or {"error": "not found"}), 200 if updated else 404
+    if request.method == "DELETE":
+        result = student_service.delete_student(student_id)
+        return jsonify(result), 200
+
+
+@app.route("/api/classes/<class_id>/students/import", methods=["POST"])
+def api_import_students(class_id):
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+
+    file_extension = file.filename.split(".").pop().lower()
+    if file_extension == "csv":
+        file_type = "csv"
+    elif file_extension in ["xlsx", "xls"]:
+        file_type = "excel"
     else:
-        rows = [{
-            "name": (request.form.get("name") or "").strip(),
-            "register_no": (request.form.get("register_no") or "").strip(),
-            "department": (request.form.get("department") or "").strip(),
-            "codeforces": (request.form.get("codeforces") or "").strip(),
-            "codechef": (request.form.get("codechef") or "").strip(),
-            "leetcode": (request.form.get("leetcode") or "").strip(),
-        }]
+        return jsonify({"error": "Unsupported file type"}), 400
+
+    update_existing = request.form.get("updateExisting", "false").lower() == "true"
+
+    try:
+        import_summary = student_service.import_students_from_file(class_id, file, file_type, update_existing)
+        return jsonify(import_summary), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        print(f"Import error: {e}")
+        return jsonify({"error": "Failed to import students"}), 500
+
+
+@app.route("/api/classes/<class_id>/students/export", methods=["GET"])
+def api_export_students(class_id):
+    excel_file = student_service.export_students_to_excel(class_id)
+    if excel_file:
+        filename = f"students_{class_id}_{datetime.now().strftime("%Y%m%d%H%M%S")}.xlsx"
+        return send_file(
+            excel_file,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    return jsonify({"error": "No students found for this class"}), 404
+
+
+@app.route("/api/fetch", methods=["POST"])
+def api_fetch():
+    payload = request.get_json(silent=True) or {}
+    class_id = payload.get("classId") or ""
+    rows = payload.get("rows") or []
+    if class_id and not rows:
+        # Fetch all students for the given class_id if no rows are provided
+        students, _ = student_service.find_by_class(class_id)
+        # Convert student objects to the format expected by fetch_engine (list of dicts with platform IDs)
+        rows = []
+        for student in students:
+            s_row = {
+                "name": student.get("studentName"),
+                "register_no": student.get("registerNo"),
+                "department": student.get("department"),
+                "codeforces": student.get("platformIds", {}).get("codeforces"),
+                "codechef": student.get("platformIds", {}).get("codechef"),
+                "leetcode": student.get("platformIds", {}).get("leetcode"),
+            }
+            rows.append(s_row)
+
+    if not isinstance(rows, list) or not rows:
+        return jsonify({"error": "rows must be a non-empty list"}), 400
+    job = fetch_engine.create_job(rows, class_id=class_id)
+    return jsonify({"jobId": job["jobId"], "status": job["status"]}), 202
+
+
+@app.route("/api/batch-fetch", methods=["POST"])
+def api_batch_fetch():
+    payload = request.get_json(silent=True) or {}
+    class_id = payload.get("classId") or ""
+    rows = payload.get("rows") or []
+    if class_id and not rows:
+        students, _ = student_service.find_by_class(class_id)
+        rows = []
+        for student in students:
+            s_row = {
+                "name": student.get("studentName"),
+                "register_no": student.get("registerNo"),
+                "department": student.get("department"),
+                "codeforces": student.get("platformIds", {}).get("codeforces"),
+                "codechef": student.get("platformIds", {}).get("codechef"),
+                "leetcode": student.get("platformIds", {}).get("leetcode"),
+            }
+            rows.append(s_row)
+
+    job = fetch_engine.create_job(rows, class_id=class_id)
+    return jsonify({
+        "jobId": job["jobId"],
+        "status": job["status"],
+        "processed": job.get("processed", 0),
+        "success": job.get("success", 0),
+        "failed": job.get("failed", 0),
+        "skipped": job.get("skipped", 0),
+    })
+
+
+@app.route("/api/rankings")
+def api_rankings():
+    period = request.args.get("period")
+    platform = request.args.get("platform")
+    class_id = request.args.get("classId", "global")  # Default to global rankings
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    query = {"classId": class_id}
+    if period:
+        query["period"] = period
+    if platform:
+        query["platform"] = platform
+    total = store.rankings.count_documents(query)
+    items = list(store.rankings.find(query=query, sort=[("generatedAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
+
+
+@app.route("/api/rankings/history")
+def api_rankings_history():
+    period = request.args.get("period", "")
+    snapshot_key = request.args.get("snapshotKey", "")
+    platform = request.args.get("platform", "")
+    class_id = request.args.get("classId", "global")
+    query = {"classId": class_id}
+    if period:
+        query["period"] = period
+    if snapshot_key:
+        query["snapshotKey"] = snapshot_key
+    if platform:
+        query["platform"] = platform
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    total = store.rankings.count_documents(query)
+    items = list(store.rankings.find(query=query, sort=[("generatedAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
+
+
+@app.route("/api/stats")
+def api_stats():
+    collection_name = request.args.get("collection", "platform_stats")
+    page = max(int(request.args.get("page", 1)), 1)
+    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
+    skip = (page - 1) * page_size
+    query = {}
+    class_id = request.args.get("classId")
+    platform = request.args.get("platform")
+    start_date = request.args.get("startDate")
+    end_date = request.args.get("endDate")
+    if class_id:
+        query["classId"] = class_id
+    if platform:
+        query["platform"] = platform
+    # TODO: Add date filtering
+
+    collection = store.collection(collection_name)
+    total = collection.count_documents(query)
+    items = list(collection.find(query=query, sort=[("createdAt", -1)], skip=skip, limit=page_size))
+    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
+
+
+@app.route("/api/reports/<class_id>/<report_type>", methods=["GET"])
+def api_reports(class_id, report_type):
+    class_obj = class_service.get_class(class_id)
+    if not class_obj:
+        return jsonify({"error": "Class not found"}), 404
+
+    dfs = []
+    sheet_names = []
+
+    if report_type == "latest_fetch" or report_type == "complete_class":
+        platform_stats = store.platform_stats.find(
+            {"classId": class_id, "fetchDate": {"$exists": True}},
+            sort=[("fetchDate", -1)]
+        ).limit(100) # Limit to a reasonable number for 
 
     # ---------- TABLES ----------
     codeforces_table = []
@@ -186,31 +421,6 @@ def index():
     )
 
 
-@app.route("/dashboard")
-def dashboard():
-    platform_count = store.students.count_documents({})
-    class_count = store.classes.count_documents({})
-    fetch_count = store.fetch_history.count_documents({})
-    running_jobs = store.jobs.count_documents({"status": "running"})
-    last_fetch = store.fetch_history.find_one(sort=[("createdAt", -1)]) or {}
-    recent_activity = list(store.fetch_logs.find(sort=[("createdAt", -1)], limit=10))
-    ranking_snapshot = store.rankings.find_one(sort=[("generatedAt", -1)]) or {}
-    monthly_winner = store.monthly_stats.find_one(sort=[("generatedAt", -1)]) or {}
-    return render_template(
-        "dashboard.html",
-        totals={
-            "total_ids": platform_count,
-            "total_classes": class_count,
-            "total_fetches": fetch_count,
-            "running_jobs": running_jobs,
-            "last_fetch": last_fetch,
-            "monthly_winner": monthly_winner,
-            "top_performer": ranking_snapshot,
-            "recent_activity": recent_activity,
-        }
-    )
-
-
 # =====================================================
 # DOWNLOAD EXCEL
 # =====================================================
@@ -235,37 +445,6 @@ def download():
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-
-@app.route("/api/fetch", methods=["POST"])
-def api_fetch():
-    payload = request.get_json(silent=True) or {}
-    class_id = payload.get("classId") or ""
-    rows = payload.get("rows") or []
-    if class_id and not rows:
-        rows = student_repo.find({"classId": class_id})
-    if not isinstance(rows, list) or not rows:
-        return jsonify({"error": "rows must be a non-empty list"}), 400
-    job = fetch_engine.create_job(rows, class_id=class_id)
-    return jsonify({"jobId": job["jobId"], "status": job["status"]}), 202
-
-
-@app.route("/api/batch-fetch", methods=["POST"])
-def api_batch_fetch():
-    payload = request.get_json(silent=True) or {}
-    class_id = payload.get("classId") or ""
-    rows = payload.get("rows") or []
-    if class_id and not rows:
-        rows = student_repo.find({"classId": class_id})
-    job = fetch_engine.create_job(rows, class_id=class_id)
-    return jsonify({
-        "jobId": job["jobId"],
-        "status": job["status"],
-        "processed": job.get("processed", 0),
-        "success": job.get("success", 0),
-        "failed": job.get("failed", 0),
-        "skipped": job.get("skipped", 0),
-    })
 
 
 @app.route("/api/jobs/<job_id>/process", methods=["POST"])
@@ -329,43 +508,6 @@ def api_resume_fetch(job_id):
         "failed": job["failed"],
         "skipped": job["skipped"],
     })
-
-
-@app.route("/api/rankings")
-def api_rankings():
-    period = request.args.get("period")
-    platform = request.args.get("platform")
-    page = max(int(request.args.get("page", 1)), 1)
-    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
-    skip = (page - 1) * page_size
-    query = {}
-    if period:
-        query["period"] = period
-    if platform:
-        query["platform"] = platform
-    total = store.rankings.count_documents(query)
-    items = list(store.rankings.find(query=query, sort=[("generatedAt", -1)], skip=skip, limit=page_size))
-    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
-
-
-@app.route("/api/rankings/history")
-def api_rankings_history():
-    period = request.args.get("period", "")
-    snapshot_key = request.args.get("snapshotKey", "")
-    platform = request.args.get("platform", "")
-    query = {}
-    if period:
-        query["period"] = period
-    if snapshot_key:
-        query["snapshotKey"] = snapshot_key
-    if platform:
-        query["platform"] = platform
-    page = max(int(request.args.get("page", 1)), 1)
-    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
-    skip = (page - 1) * page_size
-    total = store.rankings.count_documents(query)
-    items = list(store.rankings.find(query=query, sort=[("generatedAt", -1)], skip=skip, limit=page_size))
-    return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
 
 
 @app.route("/api/profile")
@@ -443,30 +585,6 @@ def api_jobs():
     return jsonify({"items": items, "page": page, "pageSize": page_size, "total": total})
 
 
-@app.route("/api/stats")
-def api_stats():
-    collection = request.args.get("collection", "platform")
-    page = max(int(request.args.get("page", 1)), 1)
-    page_size = min(max(int(request.args.get("pageSize", 25)), 1), 100)
-    skip = (page - 1) * page_size
-    query = {}
-    class_id = request.args.get("classId")
-    platform = request.args.get("platform")
-    start_date = request.args.get("startDate")
-    end_date = request.args.get("endDate")
-    if class_id:
-        query["classId"] = class_id
-    if platform:
-        query["platform"] = platform
-    if collection == "students":
-        total = store.students.count_documents(query)
-        items = store.students.find(query=query, sort=[("createdAt", -1)], skip=skip, limit=page_size)
-    else:
-        total = store.platform_stats.count_documents(query)
-        items = store.platform_stats.find(query=query, sort=[("fetchDate", -1)], skip=skip, limit=page_size)
-    return jsonify({"items": list(items), "page": page, "pageSize": page_size, "total": total})
-
-
 @app.route("/api/history", methods=["DELETE"])
 def api_delete_history():
     store.fetch_history.delete_many({})
@@ -474,42 +592,7 @@ def api_delete_history():
     return jsonify({"status": "deleted"})
 
 
-@app.route("/api/classes", methods=["GET", "POST"])
-def api_classes():
-    if request.method == "GET":
-        return jsonify({"items": class_repo.find(sort=[("createdAt", -1)])})
-    payload = request.get_json(silent=True) or {}
-    if not payload.get("className"):
-        return jsonify({"error": "className is required"}), 400
-    return jsonify(class_repo.create_class(payload)), 201
 
-
-@app.route("/api/classes/<class_id>", methods=["GET", "PUT", "DELETE"])
-def api_class_detail(class_id):
-    if request.method == "GET":
-        doc = class_repo.find_one({"classId": class_id})
-        return (jsonify(doc), 200) if doc else (jsonify({"error": "not found"}), 404)
-    if request.method == "DELETE":
-        store.students.delete_many({"classId": class_id})
-        store.classes.delete_many({"classId": class_id})
-        return jsonify({"status": "deleted"})
-    payload = request.get_json(silent=True) or {}
-    updated = class_repo.update_one({"classId": class_id}, payload, upsert=False)
-    return jsonify(updated or {"error": "not found"})
-
-
-@app.route("/api/classes/<class_id>/students", methods=["GET", "POST", "DELETE"])
-def api_class_students(class_id):
-    if request.method == "GET":
-        return jsonify({"items": student_repo.find({"classId": class_id}, sort=[("createdAt", -1)])})
-    if request.method == "DELETE":
-        store.students.delete_many({"classId": class_id})
-        return jsonify({"status": "deleted"})
-    payload = request.get_json(silent=True) or {}
-    payload["classId"] = class_id
-    if not payload.get("studentName"):
-        return jsonify({"error": "studentName is required"}), 400
-    return jsonify(student_repo.create_student(payload)), 201
 
 
 # =====================================================
