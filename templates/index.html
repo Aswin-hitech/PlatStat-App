@@ -6,49 +6,18 @@
     <link rel="stylesheet" href="/static/styles.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <style>
-        /* Simple navbar */
-        .navbar {
-            width: 100%;
-            background: #111;
-            padding: 12px 20px;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .nav-title {
-            color: white;
-            font-weight: 600;
-            font-size: 18px;
-        }
-
-        .nav-links a {
-            color: white;
-            text-decoration: none;
-            margin-left: 18px;
-            font-size: 14px;
-            padding: 6px 10px;
-            border-radius: 6px;
-            transition: 0.2s;
-        }
-
-        .nav-links a:hover {
-            background: #2d7ef7;
-        }
-    </style>
 </head>
 
 <body>
 
     <!-- ================= NAVBAR ================= -->
-    <div class="navbar">
+    <div class="navbar navbar-glass">
         <div class="nav-title">PlatStat</div>
 
         <div class="nav-links">
             <a href="/">Analyzer</a>
             <a href="/topper">Topper Calculator</a>
+            <a href="/dashboard">Dashboard</a>
         </div>
     </div>
 
@@ -98,6 +67,14 @@
 
         </form>
     </div>
+
+    <script>
+        document.querySelector("form").addEventListener("submit", function () {
+            const btn = this.querySelector("button[type='submit']");
+            btn.textContent = "Processing...";
+            btn.disabled = true;
+        });
+    </script>
 
 </body>
 

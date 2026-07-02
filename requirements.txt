@@ -3,5 +3,8 @@ requests
 beautifulsoup4
 pandas
 openpyxl
+pymongo
+python-dotenv
+gunicorn
 
 

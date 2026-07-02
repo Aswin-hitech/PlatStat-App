@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PlatStat Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body class="results-page">
+    <nav class="navbar navbar-glass">
+        <div class="nav-title">PlatStat</div>
+        <div class="nav-links">
+            <a href="/">Analyzer</a>
+            <a href="/topper">Topper Calculator</a>
+            <a href="/dashboard">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="wide-card">
+        <div class="hero">
+            <div>
+                <p class="eyebrow">Analytics overview</p>
+                <h2>Production dashboard</h2>
+            </div>
+            <a class="ghost-button" href="/api/rankings" target="_blank">View Rankings JSON</a>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-card"><span>Total IDs</span><strong>{{ totals.total_ids }}</strong></div>
+            <div class="stat-card"><span>Total Classes</span><strong>{{ totals.total_classes }}</strong></div>
+            <div class="stat-card"><span>Total Fetches</span><strong>{{ totals.total_fetches }}</strong></div>
+            <div class="stat-card"><span>Monthly Winner</span><strong>{{ totals.monthly_winner.winner or 'N/A' }}</strong></div>
+            <div class="stat-card"><span>Top Performer</span><strong>{{ totals.top_performer.metric or 'N/A' }}</strong></div>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr><th>Recent Activity</th><th>Status</th><th>Created</th></tr>
+                </thead>
+                <tbody>
+                    {% for item in totals.recent_activity %}
+                    <tr>
+                        <td>{{ item.type or 'log' }}</td>
+                        <td>{{ item.error or item.status or 'ok' }}</td>
+                        <td>{{ item.createdAt }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3">No recent activity</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

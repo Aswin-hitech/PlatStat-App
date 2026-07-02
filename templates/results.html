@@ -18,7 +18,10 @@
         </div>
         {% endif %}
 
-        <a href="/download"><button>Download Excel</button></a>
+        <div class="hero-actions">
+            <a href="/download"><button>Download Excel</button></a>
+            <a href="/dashboard"><button class="secondary-button" type="button">Open Dashboard</button></a>
+        </div>
 
         {% for title, table in [("CodeChef", codechef), ("LeetCode", leetcode), ("Codeforces", codeforces)] %}
 
