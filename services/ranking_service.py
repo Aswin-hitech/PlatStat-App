@@ -8,20 +8,15 @@ from utils.ranking_utils import month_key, safe_number, week_key, year_key
 PLATFORM_CRITERIA = {
     "codeforces": [
         ("Current Rating", True),
-        ("Problem Solved", True),
         ("Global Rank", False),
     ],
     "codechef": [
         ("Current Rating", True),
-        ("Star Rating", True),
-        ("Highest Rating", True),
-        ("Global ranking", False),
+        ("Global Rank", False),
     ],
     "leetcode": [
         ("Contest Rating", True),
-        ("Total(No.of Problem Solved)", True),
         ("Global Rank", False),
-        ("Top", False),
     ],
 }
 

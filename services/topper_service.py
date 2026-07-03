@@ -110,11 +110,11 @@ def topper_leetcode(df, month):
     }).reset_index()
 
     grouped = grouped.sort_values(
-        by=["Total(No.of Problem Solved)", "Contest Rating", "Global Rank"],
-        ascending=[False, False, True]
+        by=["Contest Rating", "Global Rank"],
+        ascending=[False, True]
     )
 
-    return grouped.head(5)
+    return {"top5": grouped.head(5), "top10": grouped.head(10)}
 
 
 # =====================================================
@@ -130,20 +130,20 @@ def topper_codeforces(df, month):
 
     df["Problem Solved"] = df["Problem Solved"].apply(to_int)
     df["Current Rating"] = df["Current Rating"].apply(to_int)
-    df["Current Rank"] = df["Current Rank"].apply(to_int)
+    df["Global Rank"] = df["Global Rank"].apply(to_int)
 
     grouped = df.groupby("Name of the Student").agg({
         "Problem Solved": "sum",
         "Current Rating": "max",
-        "Current Rank": "min"
+        "Global Rank": "min"
     }).reset_index()
 
     grouped = grouped.sort_values(
-        by=["Problem Solved", "Current Rating", "Current Rank"],
+        by=["Problem Solved", "Current Rating", "Global Rank"],
         ascending=[False, False, True]
     )
 
-    return grouped.head(5)
+    return {"top5": grouped.head(5), "top10": grouped.head(10)}
 
 
 # =====================================================
@@ -158,19 +158,19 @@ def topper_codechef(df, month):
         return pd.DataFrame()
 
     df["Current Rating"] = df["Current Rating"].apply(to_int)
-    df["Global ranking"] = df["Global ranking"].apply(to_int)
+    df["Global Rank"] = df["Global Rank"].apply(to_int)
 
     grouped = df.groupby("Name of the Student").agg({
         "Current Rating": "max",
-        "Global ranking": "min"
+        "Global Rank": "min"
     }).reset_index()
 
     grouped = grouped.sort_values(
-        by=["Current Rating", "Global ranking"],
+        by=["Current Rating", "Global Rank"],
         ascending=[False, True]
     )
 
-    return grouped.head(5)
+    return {"top5": grouped.head(5), "top10": grouped.head(10)}
 
 
 # =====================================================

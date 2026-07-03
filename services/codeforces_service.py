@@ -54,7 +54,7 @@ def get_cf_summary(sn,name,regno,dept,handle):
             "Dept": dept,
             "Date": today_ddmmyyyy(),
             "Problem Solved": solved,
-            "Current Rank": user.get("rank","AB"),
+            "Global Rank": user.get("rank","AB"),
             "Current Rating": user.get("rating","AB"),
             "Max. Rating": user.get("maxRating","AB"),
             "Max. Ranking": user.get("maxRank","AB")

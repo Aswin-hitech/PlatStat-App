@@ -199,7 +199,7 @@ def api_import_students(class_id):
 def api_export_students(class_id):
     excel_file = student_service.export_students_to_excel(class_id)
     if excel_file:
-        filename = f"students_{class_id}_{datetime.now().strftime("%Y%m%d%H%M%S")}.xlsx"
+        filename = f"students_{class_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
         return send_file(
             excel_file,
             as_attachment=True,
@@ -627,14 +627,16 @@ def topper():
 
         month = int(month_raw)
 
-        df = pd.read_excel(file)
-
+        # compute_topper now returns a dict with 'top5' and 'top10' DataFrames
         top = compute_topper(df, platform, month)
-
-        if top is None or top.empty:
+        if not top or not top.get('top5'):
             error = "No records found for selected month"
         else:
-            result = top.to_dict("records")
+            # Convert DataFrames to list of records for template rendering
+            result = {
+                'top5': top['top5'].to_dict('records'),
+                'top10': top['top10'].to_dict('records')
+            }
 
     except Exception as e:
         error = str(e)

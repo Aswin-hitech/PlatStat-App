@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 import pandas as pd
 from bson import ObjectId
+import io
 from repositories import StudentRepository, ClassRepository, ImportLogRepository
 from db import store
 
@@ -10,8 +11,11 @@ class_repo = ClassRepository()
 import_log_repo = ImportLogRepository()
 
 class StudentService:
-    def __init__(self):
-        pass
+    def find_by_class(self, class_id, search="", page=1, page_size=25):
+        """Return a list of students for a class with pagination and optional search.
+        Returns (students, total_count)."""
+        return student_repo.find_by_class(class_id, search=search, page=page, page_size=page_size)
+
 
     def add_single_student(self, class_id, student_data):
         # Store class reference as ObjectId

@@ -48,7 +48,7 @@ def get_cc_summary(sn, name, regno, dept, user):
         "Highest Rating": "AB",
         "Division": "AB",
         "Star Rating": "AB",
-        "Global ranking": "AB",
+        "Global Rank": "AB",
         "Country Ranking": "AB",
         "Contest participated": "AB",
         "Problems Solved": "AB"
@@ -122,7 +122,7 @@ def get_cc_summary(sn, name, regno, dept, user):
             if "filterBy=Country" in href:
                 row["Country Ranking"] = num.group(0)
             elif "/ratings/all" in href:
-                row["Global ranking"] = num.group(0)
+                row["Global Rank"] = num.group(0)
 
         # ====================================
         # CONTEST PARTICIPATED
