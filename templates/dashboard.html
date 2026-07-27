@@ -15,7 +15,14 @@
                 <img src="/static/favicon.ico" alt="PlatStat Logo" class="nav-logo">
                 <span class="nav-title">PlatStat</span>
             </a>
-            <div class="nav-links">
+            <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+                <span class="sandwich-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+            <div class="nav-links" id="navLinks">
                 <!-- <a href="/dashboard" class="active">Dashboard</a> -->
                 <a href="/">Analyzer</a>
                 <a href="/topper">Topper Calculator</a>
@@ -205,6 +212,15 @@
                     }
                 })
                 .catch(err => console.error('Error loading notifications:', err));
+        }
+
+        function toggleMobileNav() {
+            const btn = document.getElementById('navToggle');
+            const links = document.getElementById('navLinks');
+            if (btn && links) {
+                btn.classList.toggle('open');
+                links.classList.toggle('show');
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {

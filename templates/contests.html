@@ -16,7 +16,14 @@
                 <img src="/static/favicon.ico" alt="PlatStat Logo" class="nav-logo">
                 <span class="nav-title">PlatStat</span>
             </a>
-            <div class="nav-links">
+            <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+                <span class="sandwich-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+            <div class="nav-links" id="navLinks">
                 <!-- <a href="/dashboard">Dashboard</a> -->
                 <a href="/">Analyzer</a>
                 <a href="/topper">Topper Calculator</a>
@@ -27,7 +34,10 @@
 
         <!-- Page Header -->
         <header class="page-header">
-            <span class="page-eyebrow">UNIFIED CONTEST CENTER</span>
+            <span class="page-eyebrow">
+                <img src="/static/favicon.ico" alt="PlatStat Logo" style="width:16px; height:16px; vertical-align:middle; margin-right:6px; border-radius:4px;">
+                UNIFIED CONTEST CENTER
+            </span>
             <h1>Upcoming Competitive Contests</h1>
             <p>Track schedule, live countdowns, and set multi-interval reminders for LeetCode, Codeforces, CodeChef, and AtCoder.</p>
         </header>
@@ -306,6 +316,15 @@
                     }
                 })
                 .catch(err => console.error('Error loading notifications:', err));
+        }
+
+        function toggleMobileNav() {
+            const btn = document.getElementById('navToggle');
+            const links = document.getElementById('navLinks');
+            if (btn && links) {
+                btn.classList.toggle('open');
+                links.classList.toggle('show');
+            }
         }
 
         // Initialize

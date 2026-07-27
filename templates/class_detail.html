@@ -15,7 +15,14 @@
             <img src="/static/favicon.ico" alt="PlatStat Logo" class="nav-logo">
             <span class="nav-title">PlatStat</span>
         </a>
-        <div class="nav-links">
+        <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+            <span class="sandwich-icon">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
+        </button>
+        <div class="nav-links" id="navLinks">
             <a href="/">Home</a>
             <a href="/dashboard">Dashboard</a>
         </div>
@@ -195,6 +202,14 @@
                     console.error('Error deleting student:', error);
                     alert('An error occurred while deleting the student.');
                 });
+            }
+        }
+        function toggleMobileNav() {
+            const btn = document.getElementById('navToggle');
+            const links = document.getElementById('navLinks');
+            if (btn && links) {
+                btn.classList.toggle('open');
+                links.classList.toggle('show');
             }
         }
     </script>

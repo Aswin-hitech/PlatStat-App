@@ -132,6 +132,55 @@ body::before {
     -webkit-text-fill-color: var(--text-primary);
 }
 
+/* Sandwich / Hamburger Toggle Button */
+.nav-toggle {
+    display: none;
+    background: rgba(43, 140, 255, 0.08);
+    border: 1px solid rgba(43, 140, 255, 0.22);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-toggle:hover {
+    background: rgba(43, 140, 255, 0.16);
+    border-color: var(--accent-blue);
+}
+
+.sandwich-icon {
+    width: 22px;
+    height: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+}
+
+.sandwich-icon span {
+    display: block;
+    width: 100%;
+    height: 2.5px;
+    background-color: var(--text-primary);
+    border-radius: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-toggle.open .sandwich-icon span:nth-child(1) {
+    transform: translateY(6.75px) rotate(45deg);
+}
+
+.nav-toggle.open .sandwich-icon span:nth-child(2) {
+    opacity: 0;
+    transform: scaleX(0);
+}
+
+.nav-toggle.open .sandwich-icon span:nth-child(3) {
+    transform: translateY(-6.75px) rotate(-45deg);
+}
+
 .nav-links {
     display: flex;
     gap: 12px;
@@ -777,18 +826,55 @@ tbody tr:hover {
         gap: 10px;
     }
 
-    .platform-card {
-        padding: 14px 10px;
+@media (max-width: 768px) {
+    .navbar {
+        position: relative;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 20px;
+    }
+
+    .nav-toggle {
+        display: flex;
+    }
+
+    .nav-links {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        gap: 8px;
+        padding-top: 16px;
+        margin-top: 12px;
+        border-top: 1px solid var(--card-border);
+        animation: navSlideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    .nav-links.show {
+        display: flex;
+    }
+
+    .nav-links a {
+        width: 100%;
+        text-align: center;
+        padding: 12px 18px;
+        background: rgba(255, 255, 255, 0.5);
+    }
+}
+
+@keyframes navSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
 @media (max-width: 600px) {
-    .navbar {
-        flex-direction: column;
-        gap: 14px;
-        padding: 16px 20px;
-    }
-
     .page-header h1 {
         font-size: 1.8rem;
     }
@@ -1282,4 +1368,5 @@ button, .btn-primary-cta, .btn-secondary, .btn-download-excel, .btn-sync {
     align-items: center;
     gap: 12px;
     cursor: pointer;
+}
 }

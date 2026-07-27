@@ -16,7 +16,14 @@
                 <img src="/static/favicon.ico" alt="PlatStat Logo" class="nav-logo">
                 <span class="nav-title">PlatStat</span>
             </a>
-            <div class="nav-links">
+            <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+                <span class="sandwich-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+            <div class="nav-links" id="navLinks">
                 <!-- <a href="/dashboard">Dashboard</a> -->
                 <a href="/">Analyzer</a>
                 <a href="/topper">Topper Calculator</a>
@@ -27,7 +34,10 @@
 
         <!-- Page Header -->
         <header class="page-header">
-            <span class="page-eyebrow">NOTIFICATION CENTER</span>
+            <span class="page-eyebrow">
+                <img src="/static/favicon.ico" alt="PlatStat Logo" style="width:16px; height:16px; vertical-align:middle; margin-right:6px; border-radius:4px;">
+                NOTIFICATION CENTER
+            </span>
             <h1>Alerts & Reminder History</h1>
             <p>View all your contest alerts, subscription notifications, and upcoming contest reminders in a dedicated view.</p>
         </header>
@@ -136,6 +146,15 @@
             if (confirm("Are you sure you want to clear all notifications?")) {
                 fetch('/api/notifications/clear', { method: 'POST' })
                     .then(() => loadNotificationsPage());
+            }
+        }
+
+        function toggleMobileNav() {
+            const btn = document.getElementById('navToggle');
+            const links = document.getElementById('navLinks');
+            if (btn && links) {
+                btn.classList.toggle('open');
+                links.classList.toggle('show');
             }
         }
 
