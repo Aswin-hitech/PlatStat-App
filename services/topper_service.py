@@ -1,20 +1,22 @@
 import pandas as pd
-import numpy as np
 
 
-# =====================================================
-# UNIVERSAL SAFE PARSERS
-# =====================================================
+RATING_COLUMNS = {
+    "leetcode": "Contest Rating",
+    "codeforces": "Current Rating",
+    "codechef": "Current Rating",
+}
 
-def to_int(x):
-    if pd.isna(x):
+
+def to_int(value):
+    if pd.isna(value):
         return None
-    x = str(x).strip()
-    if x in ["AB", "-", ""]:
+    text = str(value).strip()
+    if text in ("", "AB", "-"):
         return None
     try:
-        return int(float(x))
-    except:
+        return int(float(text))
+    except Exception:
         return None
 
 
@@ -23,11 +25,7 @@ def parse_date_column(df):
         return df
 
     df = df.copy()
-    df["Date"] = pd.to_datetime(
-        df["Date"],
-        dayfirst=True,
-        errors="coerce"
-    )
+    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
     return df
 
 
@@ -38,154 +36,53 @@ def filter_month(df, month):
     return df[df["Date"].dt.month == month]
 
 
-# =====================================================
-# MULTI TABLE DETECTOR (ROBUST)
-# =====================================================
-
-EXPECTED_HEADER = [
-    "S. No",
-    "Name of the Student",
-    "Date"
-]
-
-def is_header_row(row):
-    values = [str(x).strip() for x in row.values]
-    return all(h in values for h in EXPECTED_HEADER)
-
-
 def clean_excel(df):
-
-    # Case 1: already clean
     if "Name of the Student" in df.columns:
         return df.dropna(how="all").reset_index(drop=True)
 
-    tables = []
-    header_positions = []
+    expected_header = ["S. No", "Name of the Student", "Date"]
+    header_rows = []
 
-    # find header rows
     for i in range(len(df)):
-        if is_header_row(df.iloc[i]):
-            header_positions.append(i)
+        values = [str(x).strip() for x in df.iloc[i].values]
+        if all(h in values for h in expected_header):
+            header_rows.append(i)
 
-    if not header_positions:
+    if not header_rows:
         return pd.DataFrame()
 
-    # slice tables
-    for idx, start in enumerate(header_positions):
-        end = header_positions[idx+1] if idx+1 < len(header_positions) else len(df)
-
+    tables = []
+    for idx, start in enumerate(header_rows):
+        end = header_rows[idx + 1] if idx + 1 < len(header_rows) else len(df)
         table = df.iloc[start:end].copy()
         table.columns = table.iloc[0]
-        table = table[1:]
-        table = table.dropna(how="all")
-
-        # remove rows that accidentally contain header again
-        table = table[table["Name of the Student"] != "Name of the Student"]
-
+        table = table[1:].dropna(how="all")
+        if "Name of the Student" in table.columns:
+            table = table[table["Name of the Student"] != "Name of the Student"]
         tables.append(table)
 
-    merged = pd.concat(tables, ignore_index=True)
-    return merged.reset_index(drop=True)
+    return pd.concat(tables, ignore_index=True).reset_index(drop=True)
 
-
-# =====================================================
-# LEETCODE TOPPER
-# =====================================================
-
-def topper_leetcode(df, month):
-
-    df = clean_excel(df)
-    df = filter_month(df, month)
-    if df.empty:
-        return pd.DataFrame()
-
-    df["Total(No.of Problem Solved)"] = df["Total(No.of Problem Solved)"].apply(to_int)
-    df["Contest Rating"] = df["Contest Rating"].apply(to_int)
-    df["Global Rank"] = df["Global Rank"].apply(to_int)
-
-    grouped = df.groupby("Name of the Student").agg({
-        "Total(No.of Problem Solved)": "sum",
-        "Contest Rating": "max",
-        "Global Rank": "min"
-    }).reset_index()
-
-    grouped = grouped.sort_values(
-        by=["Contest Rating", "Global Rank"],
-        ascending=[False, True]
-    )
-
-    return {"top5": grouped.head(5), "top10": grouped.head(10)}
-
-
-# =====================================================
-# CODEFORCES TOPPER
-# =====================================================
-
-def topper_codeforces(df, month):
-
-    df = clean_excel(df)
-    df = filter_month(df, month)
-    if df.empty:
-        return pd.DataFrame()
-
-    df["Problem Solved"] = df["Problem Solved"].apply(to_int)
-    df["Current Rating"] = df["Current Rating"].apply(to_int)
-    df["Global Rank"] = df["Global Rank"].apply(to_int)
-
-    grouped = df.groupby("Name of the Student").agg({
-        "Problem Solved": "sum",
-        "Current Rating": "max",
-        "Global Rank": "min"
-    }).reset_index()
-
-    grouped = grouped.sort_values(
-        by=["Problem Solved", "Current Rating", "Global Rank"],
-        ascending=[False, False, True]
-    )
-
-    return {"top5": grouped.head(5), "top10": grouped.head(10)}
-
-
-# =====================================================
-# CODECHEF TOPPER
-# =====================================================
-
-def topper_codechef(df, month):
-
-    df = clean_excel(df)
-    df = filter_month(df, month)
-    if df.empty:
-        return pd.DataFrame()
-
-    df["Current Rating"] = df["Current Rating"].apply(to_int)
-    df["Global Rank"] = df["Global Rank"].apply(to_int)
-
-    grouped = df.groupby("Name of the Student").agg({
-        "Current Rating": "max",
-        "Global Rank": "min"
-    }).reset_index()
-
-    grouped = grouped.sort_values(
-        by=["Current Rating", "Global Rank"],
-        ascending=[False, True]
-    )
-
-    return {"top5": grouped.head(5), "top10": grouped.head(10)}
-
-
-# =====================================================
-# UNIVERSAL WRAPPER
-# =====================================================
 
 def compute_topper(df, platform, month):
+    platform = (platform or "").strip().lower()
+    rating_column = RATING_COLUMNS.get(platform)
+    if not rating_column:
+        return pd.DataFrame()
 
-    if platform == "leetcode":
-        return topper_leetcode(df, month)
+    df = clean_excel(df)
+    df = filter_month(df, month)
+    if df.empty or "Name of the Student" not in df.columns or rating_column not in df.columns:
+        return pd.DataFrame()
 
-    elif platform == "codeforces":
-        return topper_codeforces(df, month)
+    df = df.copy()
+    df[rating_column] = df[rating_column].apply(to_int)
+    df = df.dropna(subset=["Name of the Student"])
 
-    elif platform == "codechef":
-        return topper_codechef(df, month)
-
-    return pd.DataFrame()
+    grouped = (
+        df.groupby("Name of the Student", as_index=False)
+        .agg({rating_column: "max"})
+        .sort_values(by=[rating_column, "Name of the Student"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+    return grouped

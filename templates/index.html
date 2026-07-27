@@ -1,81 +1,405 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <title>PlatStat</title>
+    <meta charset="UTF-8">
+    <title>PlatStat Analyzer</title>
     <link rel="stylesheet" href="/static/styles.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 </head>
-
 <body>
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <nav class="navbar">
+            <div class="nav-title">PlatStat</div>
+            <div class="nav-links">
+                <!-- <a href="/dashboard">Dashboard</a> -->
+                <a href="/" class="active">Analyzer</a>
+                <a href="/topper">Topper Calculator</a>
+                <a href="/contests">Contest Center</a>
+                <a href="/notifications">Notifications <span class="nav-badge" id="nav_unread_badge" style="display:none;">0</span></a>
+            </div>
+        </nav>
 
-    <!-- ================= NAVBAR ================= -->
-    <div class="navbar navbar-glass">
-        <div class="nav-title">PlatStat</div>
-
-        <div class="nav-links">
-            <a href="/">Analyzer</a>
-            <a href="/topper">Topper Calculator</a>
-            <a href="/dashboard">Dashboard</a>
-        </div>
-    </div>
-
-    <!-- ================= MAIN CARD ================= -->
-
-    <div class="card">
-        <h2>PlatStat Analyzer</h2>
+        <!-- Page Header -->
+        <header class="page-header">
+            <span class="page-eyebrow">PLATSTAT INTELLIGENCE</span>
+            <h1>Performance & Contest Analytics</h1>
+            <p>Track student performance across Codeforces, CodeChef, and LeetCode contests in real-time.</p>
+        </header>
 
         {% if error %}
-        <div class="error-alert">
-            {{ error }}
-        </div>
+        <div class="error-alert" id="server-error-alert">{{ error }}</div>
         {% endif %}
+        <div class="error-alert" id="client-error-alert" style="display: none;"></div>
 
-        <form method="POST" action="/" enctype="multipart/form-data">
+        <!-- Main Analyzer Form -->
+        <form method="POST" action="/" enctype="multipart/form-data" id="analyzerForm">
+            <div class="analyzer-grid">
+                
+                <!-- Left Column: Platforms & Contest Selection -->
+                <div class="card-section">
+                    <div class="section-title">
+                        <span>Target Platforms</span>
+                        <span class="badge">Step 1</span>
+                    </div>
 
-            <h3>Platforms to Track</h3>
+                    <div class="platform-grid">
+                        <!-- Codeforces Card -->
+                        <div class="platform-card active" id="card_codeforces" onclick="togglePlatform('codeforces')">
+                            <input type="checkbox" name="platform_codeforces" id="platform_codeforces" checked>
+                            <span class="check-indicator">✓</span>
+                            <span class="platform-icon">📊</span>
+                            <span class="platform-name">Codeforces</span>
+                        </div>
 
-            <label><input type="checkbox" name="platform_codeforces" checked> Codeforces</label><br>
-            <label><input type="checkbox" name="platform_codechef" checked> CodeChef</label><br>
-            <label><input type="checkbox" name="platform_leetcode" checked> LeetCode</label>
+                        <!-- CodeChef Card -->
+                        <div class="platform-card active" id="card_codechef" onclick="togglePlatform('codechef')">
+                            <input type="checkbox" name="platform_codechef" id="platform_codechef" checked>
+                            <span class="check-indicator">✓</span>
+                            <span class="platform-icon">🍳</span>
+                            <span class="platform-name">CodeChef</span>
+                        </div>
 
-            <hr>
+                        <!-- LeetCode Card -->
+                        <div class="platform-card active" id="card_leetcode" onclick="togglePlatform('leetcode')">
+                            <input type="checkbox" name="platform_leetcode" id="platform_leetcode" checked>
+                            <span class="check-indicator">✓</span>
+                            <span class="platform-icon">⚡</span>
+                            <span class="platform-name">LeetCode</span>
+                        </div>
+                    </div>
 
-            <h3>Single Student</h3>
+                    <!-- Custom LeetCode Contest Selector Section -->
+                    <div id="leetcode_contest_section" class="contest-picker-section">
+                        <label for="leetcode_contest_search">
+                            <span>Select LeetCode Contest</span>
+                            <span style="color:var(--cyan-glow); font-size:12px;">REQUIRED</span>
+                        </label>
+                        
+                        <div class="search-input-wrapper">
+                            <input type="text" id="leetcode_contest_search" placeholder="Search contest name or date..." oninput="filterContestsUI()">
+                        </div>
 
-            <input name="name" placeholder="Student Name">
-            <input name="register_no" placeholder="Register No">
-            <input name="department" placeholder="Department">
+                        <!-- Custom Contest Card List -->
+                        <div id="contest_list_cards" class="contest-list-cards">
+                            <div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">Loading contests...</div>
+                        </div>
 
-            <input name="codeforces" placeholder="Codeforces ID">
-            <input name="codechef" placeholder="CodeChef ID">
-            <input name="leetcode" placeholder="LeetCode ID">
+                        <!-- Hidden Select Fallback for Backend Form Compatibility -->
+                        <select name="leetcode_contest" id="leetcode_contest_select"></select>
 
-            <hr>
+                        <div id="lc_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
+                    </div>
+                </div>
 
-            <h3>Bulk Upload (CSV)</h3>
+                <!-- Right Column: Input Mode Switcher & Student Data -->
+                <div class="card-section">
+                    <div class="section-title">
+                        <span>Student Data Source</span>
+                        <span class="badge">Step 2</span>
+                    </div>
 
-            <p><b>CSV Headers Required:</b></p>
-            <pre>name,register_no,department,codeforces,codechef,leetcode</pre>
+                    <!-- Segmented Control Tab Switcher -->
+                    <div class="segmented-control">
+                        <button type="button" class="tab-button active" id="tab_btn_single" onclick="switchTab('single')">Single Student</button>
+                        <button type="button" class="tab-button" id="tab_btn_bulk" onclick="switchTab('bulk')">Bulk CSV / Excel</button>
+                    </div>
 
-            <p>If CSV uploaded → form fields ignored</p>
+                    <!-- Tab 1: Single Student Fields -->
+                    <div id="tab_single_content">
+                        <div class="form-grid">
+                            <div class="input-field-group">
+                                <label>Student Name</label>
+                                <input type="text" name="name" id="field_name" placeholder="e.g. Alex Johnson">
+                            </div>
+                            <div class="input-field-group">
+                                <label>Register Number</label>
+                                <input type="text" name="register_no" id="field_register_no" placeholder="e.g. 71762105001">
+                            </div>
+                            <div class="input-field-group">
+                                <label>Department</label>
+                                <input type="text" name="department" id="field_department" placeholder="e.g. Computer Science">
+                            </div>
+                            <div class="input-field-group">
+                                <label>Codeforces Handle</label>
+                                <input type="text" name="codeforces" id="field_codeforces" placeholder="e.g. tourist">
+                            </div>
+                            <div class="input-field-group">
+                                <label>CodeChef Handle</label>
+                                <input type="text" name="codechef" id="field_codechef" placeholder="e.g. chef_alex">
+                            </div>
+                            <div class="input-field-group">
+                                <label>LeetCode Handle</label>
+                                <input type="text" name="leetcode" id="field_leetcode" placeholder="e.g. alex_lc">
+                            </div>
+                        </div>
+                    </div>
 
-            <input type="file" name="csvfile">
+                    <!-- Tab 2: Bulk Upload Dropzone -->
+                    <div id="tab_bulk_content" style="display: none;">
+                        <div class="dropzone-container" id="dropzone" onclick="document.getElementById('file_input').click()">
+                            <span class="dropzone-icon">☁️</span>
+                            <div class="dropzone-title">Upload CSV or Excel File</div>
+                            <div class="dropzone-subtext">Click to browse or drag and drop file here</div>
+                            <div class="file-tags">
+                                <span class="file-tag">.CSV</span>
+                                <span class="file-tag">.XLSX</span>
+                                <span class="file-tag">.XLS</span>
+                            </div>
+                            <input type="file" name="csvfile" id="file_input" accept=".csv,.xlsx,.xls" style="display: none;" onchange="handleFileSelected(this)">
+                        </div>
 
-            <button type="submit">Analyze</button>
+                        <div id="file-preview-card">
+                            <div class="file-info">
+                                <span style="font-size: 20px;">📄</span>
+                                <div>
+                                    <div class="file-name" id="preview_file_name">students.csv</div>
+                                    <div class="file-size" id="preview_file_size">24 KB</div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-remove-file" onclick="removeSelectedFile(event)">✖</button>
+                        </div>
+                    </div>
 
+                    <!-- CTA Submit Button -->
+                    <button type="submit" class="btn-primary-cta">ANALYZE PLATSTAT RANKINGS →</button>
+                </div>
+
+            </div>
         </form>
     </div>
 
     <script>
-        document.querySelector("form").addEventListener("submit", function () {
-            const btn = this.querySelector("button[type='submit']");
-            btn.textContent = "Processing...";
-            btn.disabled = true;
+        let fetchedContests = [];
+        let selectedContestTitle = '';
+
+        // Platform Card Toggle Logic
+        function togglePlatform(platform) {
+            const card = document.getElementById(`card_${platform}`);
+            const checkbox = document.getElementById(`platform_${platform}`);
+            
+            checkbox.checked = !checkbox.checked;
+            if (checkbox.checked) {
+                card.classList.add('active');
+            } else {
+                card.classList.remove('active');
+            }
+
+            if (platform === 'leetcode') {
+                loadLeetCodeContests();
+            }
+        }
+
+        // Fetch & Render Custom LeetCode Contests
+        function loadLeetCodeContests() {
+            const lcSection = document.getElementById('leetcode_contest_section');
+            const lcCheckbox = document.getElementById('platform_leetcode');
+            const cardsContainer = document.getElementById('contest_list_cards');
+            const hiddenSelect = document.getElementById('leetcode_contest_select');
+            const errDiv = document.getElementById('lc_contest_error');
+
+            if (!lcCheckbox.checked) {
+                lcSection.style.display = 'none';
+                return;
+            }
+
+            lcSection.style.display = 'block';
+
+            if (fetchedContests.length > 0) {
+                renderContestCards(fetchedContests);
+                return;
+            }
+
+            cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">Loading contests...</div>';
+            errDiv.style.display = 'none';
+
+            fetch('/api/leetcode/contests')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error || !data.contests || data.contests.length === 0) {
+                        const errMsg = data.error || 'Failed to load LeetCode contests from API.';
+                        cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--error-text); font-size:13px;">Unable to fetch contests</div>';
+                        errDiv.textContent = errMsg;
+                        errDiv.style.display = 'block';
+                    } else {
+                        fetchedContests = data.contests;
+                        renderContestCards(fetchedContests);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching LC contests:', err);
+                    cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--error-text); font-size:13px;">Unable to fetch contests</div>';
+                    errDiv.textContent = 'Failed to load LeetCode contests from API. Please try again.';
+                    errDiv.style.display = 'block';
+                });
+        }
+
+        // Render Contest Cards into list
+        function renderContestCards(contests) {
+            const cardsContainer = document.getElementById('contest_list_cards');
+            const hiddenSelect = document.getElementById('leetcode_contest_select');
+            const searchVal = (document.getElementById('leetcode_contest_search').value || '').toLowerCase();
+            
+            cardsContainer.innerHTML = '';
+            hiddenSelect.innerHTML = '';
+
+            const filtered = contests.filter(c => 
+                c.title.toLowerCase().includes(searchVal) || c.date.includes(searchVal)
+            );
+
+            if (filtered.length === 0) {
+                cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">No matching contests found</div>';
+                return;
+            }
+
+            if (!selectedContestTitle && filtered.length > 0) {
+                selectedContestTitle = filtered[0].title;
+            }
+
+            filtered.forEach((c, idx) => {
+                // Build Card element
+                const itemCard = document.createElement('div');
+                itemCard.className = `contest-item-card ${c.title === selectedContestTitle ? 'selected' : ''}`;
+                itemCard.onclick = () => selectContestItem(c.title);
+                
+                itemCard.innerHTML = `
+                    <span class="contest-item-title">${c.title}</span>
+                    <span class="contest-item-date">${c.date}</span>
+                `;
+                cardsContainer.appendChild(itemCard);
+
+                // Build hidden select option
+                const opt = document.createElement('option');
+                opt.value = c.title;
+                opt.textContent = `${c.title} (${c.date})`;
+                if (c.title === selectedContestTitle) {
+                    opt.selected = true;
+                }
+                hiddenSelect.appendChild(opt);
+            });
+        }
+
+        function selectContestItem(title) {
+            selectedContestTitle = title;
+            renderContestCards(fetchedContests);
+        }
+
+        function filterContestsUI() {
+            if (fetchedContests.length > 0) {
+                renderContestCards(fetchedContests);
+            }
+        }
+
+        // Segmented Control Tab Switcher
+        function switchTab(mode) {
+            const singleBtn = document.getElementById('tab_btn_single');
+            const bulkBtn = document.getElementById('tab_btn_bulk');
+            const singleContent = document.getElementById('tab_single_content');
+            const bulkContent = document.getElementById('tab_bulk_content');
+
+            if (mode === 'single') {
+                singleBtn.classList.add('active');
+                bulkBtn.classList.remove('active');
+                singleContent.style.display = 'block';
+                bulkContent.style.display = 'none';
+            } else {
+                bulkBtn.classList.add('active');
+                singleBtn.classList.remove('active');
+                bulkContent.style.display = 'block';
+                singleContent.style.display = 'none';
+            }
+        }
+
+        // Drag & Drop File Handler
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file_input');
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropzone.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('drag-over');
+            }, false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files && files.length > 0) {
+                fileInput.files = files;
+                handleFileSelected(fileInput);
+            }
+        });
+
+        function handleFileSelected(input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                document.getElementById('preview_file_name').textContent = file.name;
+                document.getElementById('preview_file_size').textContent = (file.size / 1024).toFixed(1) + ' KB';
+                document.getElementById('file-preview-card').style.display = 'flex';
+            }
+        }
+
+        function removeSelectedFile(e) {
+            e.stopPropagation();
+            fileInput.value = '';
+            document.getElementById('file-preview-card').style.display = 'none';
+        }
+
+        // Form Submission Validation
+        document.getElementById('analyzerForm').addEventListener('submit', function(e) {
+            const lcCheckbox = document.getElementById('platform_leetcode');
+            const clientErr = document.getElementById('client-error-alert');
+            clientErr.style.display = 'none';
+
+            if (lcCheckbox.checked) {
+                if (!selectedContestTitle || selectedContestTitle.trim() === '') {
+                    e.preventDefault();
+                    clientErr.textContent = 'Please select a LeetCode contest before analyzing.';
+                    clientErr.style.display = 'block';
+                    document.getElementById('leetcode_contest_section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        });
+
+        // Notification Bell Logic
+        function toggleNotificationPanel(e) {
+            if (e) e.stopPropagation();
+            const panel = document.getElementById('notification_panel');
+            if (panel) {
+                panel.classList.toggle('open');
+                loadNavNotifications();
+            }
+        }
+
+        function loadNavNotifications() {
+            fetch('/api/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const badge = document.getElementById('nav_unread_badge');
+                    if (badge) {
+                        if (data.unreadCount > 0) {
+                            badge.textContent = data.unreadCount;
+                            badge.style.display = 'inline-block';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(err => console.error('Error loading notifications:', err));
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLeetCodeContests();
+            loadNavNotifications();
         });
     </script>
-
 </body>
-
 </html>

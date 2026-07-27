@@ -7,7 +7,7 @@ from config import settings
 from repositories import HistoryRepository, JobRepository, StatRepository, StudentRepository
 from services.codechef_service import get_cc_summary
 from services.codeforces_service import get_cf_summary
-from services.leetcode_service import get_lc_summary
+from services.leetcode_service import get_lc_summary, find_latest_lc_contest
 from services.ranking_service import compute_rankings
 from utils.ranking_utils import month_key, week_key, year_key
 from db import store
@@ -93,7 +93,7 @@ class FetchEngine:
             return f"https://leetcode.com/u/{platform_id}"
         return ""
 
-    def _call_scraper(self, platform, row, idx):
+    def _call_scraper(self, platform, row, idx, latest_lc_title=None, latest_lc_time=None):
         name = (row.get("studentName") or row.get("name") or "").strip()
         regno = (row.get("register_no") or row.get("registerNo") or "").strip()
         dept = (row.get("department") or "").strip()
@@ -105,15 +105,15 @@ class FetchEngine:
         if platform == "codechef":
             return get_cc_summary(idx, name, regno, dept, platform_id)
         if platform == "leetcode":
-            return get_lc_summary(idx, name, regno, dept, platform_id)
+            return get_lc_summary(idx, name, regno, dept, platform_id, latest_lc_title, latest_lc_time)
         return None
 
-    def _run_single(self, platform, row, idx, class_id):
+    def _run_single(self, platform, row, idx, class_id, latest_lc_title=None, latest_lc_time=None):
         platform_id = (row.get(platform) or "").strip()
         profile_url = self._build_profile_url(platform, platform_id, row)
         for attempt in range(settings.FETCH_RETRIES):
             try:
-                result = self._call_scraper(platform, row, idx)
+                result = self._call_scraper(platform, row, idx, latest_lc_title, latest_lc_time)
                 if not result:
                     continue
                 snapshot = {
@@ -199,6 +199,15 @@ class FetchEngine:
         started_at = job.get("startedAt") or datetime.utcnow()
         job["startedAt"] = started_at
 
+        # Compute the globally latest LeetCode contest once per job (not per student)
+        # so every student's contest participation is checked consistently.
+        latest_lc_title = job.get("_latestLcTitle")
+        latest_lc_time = job.get("_latestLcTime")
+        if latest_lc_title is None and any(platform == "leetcode" for _, platform in batch):
+            latest_lc_title, latest_lc_time = find_latest_lc_contest(rows)
+            job["_latestLcTitle"] = latest_lc_title
+            job["_latestLcTime"] = latest_lc_time
+
         for row, platform in batch:
             if job.get("cancelled"):
                 break
@@ -208,7 +217,7 @@ class FetchEngine:
             job["currentPlatformId"] = platform_id
             job["currentPlatform"] = platform
             self._persist_job(job)
-            result = self._run_single(platform, row, idx, job.get("classId", ""))
+            result = self._run_single(platform, row, idx, job.get("classId", ""), latest_lc_title, latest_lc_time)
             processed += 1
             if result.ok:
                 success += 1
@@ -228,7 +237,7 @@ class FetchEngine:
         job["elapsedSeconds"] = max(0, (datetime.utcnow() - started_at).total_seconds())
         total_done = max(processed, 1)
         job["rpm"] = round((success + failed) / max(job["elapsedSeconds"] / 60, 1), 2)
-        job["etaSeconds"] = max(0, (job["remaining"] * settings.MAX_CONCURRENT_FETCHES))
+        job["etaSeconds"] = max(0, round(job["remaining"] / max(settings.MAX_CONCURRENT_FETCHES, 1)))
         if job.get("cancelled"):
             job["status"] = "cancelled"
             job["finishedAt"] = datetime.utcnow()

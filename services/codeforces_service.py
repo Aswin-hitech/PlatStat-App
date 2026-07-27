@@ -10,7 +10,7 @@ def ab_row(sn,name,regno,dept):
         "Dept": dept,
         "Date": today_ddmmyyyy(),
         "Problem Solved": "AB",
-        "Current Rank": "AB",
+        "Global Rank": "AB",
         "Current Rating": "AB",
         "Max. Rating": "AB",
         "Max. Ranking": "AB"

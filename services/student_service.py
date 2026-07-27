@@ -53,8 +53,12 @@ class StudentService:
         for index, row in df.iterrows():
             student_data = row.to_dict()
             student_data["classId"] = ObjectId(class_id)
-            student_data["studentName"] = (student_data.get("studentName") or "").strip()
-            student_data["registerNo"] = (student_data.get("registerNo") or "").strip()
+            student_data["studentName"] = str(student_data.get("studentName") or "").strip()
+            if student_data["studentName"].lower() == "nan":
+                student_data["studentName"] = ""
+            student_data["registerNo"] = str(student_data.get("registerNo") or "").strip()
+            if student_data["registerNo"].lower() == "nan":
+                student_data["registerNo"] = ""
 
             if not student_data["studentName"] or not student_data["registerNo"]:
                 failed_count += 1
@@ -102,13 +106,14 @@ class StudentService:
         return student_repo.update_one({"studentId": student_id}, student_data)
 
     def delete_student(self, student_id):
+        student = student_repo.find_one({"studentId": student_id})
         student_repo.delete({"studentId": student_id})
-        # Optionally, refresh student count for the class
-        # class_repo.refresh_student_count(class_id_of_student)
+        if student and student.get("classId"):
+            class_repo.refresh_student_count(student["classId"])
         return {"status": "deleted"}
 
     def export_students_to_excel(self, class_id):
-        students = student_repo.find({"classId": class_id})
+        students = student_repo.find({"classId": ObjectId(class_id)})
         if not students:
             return None
         df = pd.DataFrame(list(students))

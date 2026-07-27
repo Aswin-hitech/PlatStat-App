@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime
 
+from repositories import RankingRepository
 from db import store
 from utils.ranking_utils import month_key, safe_number, week_key, year_key
 
@@ -19,6 +20,9 @@ PLATFORM_CRITERIA = {
         ("Global Rank", False),
     ],
 }
+
+
+ranking_repo = RankingRepository()
 
 
 def _value(doc, field):
@@ -91,6 +95,8 @@ def _build_snapshot(platform, period, reference_date, docs):
     criteria = PLATFORM_CRITERIA.get(platform, [])
     ranked = sorted(docs, key=lambda d: _sort_key(d, criteria))
     snapshot = {
+        "classId": "global",
+        "metric": "platform_rankings",
         "platform": platform,
         "period": period,
         "rankingType": f"{period.title()} Rankings",
@@ -101,7 +107,7 @@ def _build_snapshot(platform, period, reference_date, docs):
         "top10": ranked[:10],
         "count": len(ranked),
     }
-    store.rankings.insert_one(snapshot)
+    ranking_repo.upsert_snapshot(snapshot)
     return snapshot
 
 
@@ -141,12 +147,12 @@ def compute_rankings(reference_date=None):
             snapshots[platform][period] = _build_snapshot(platform, period, reference_date, filtered)
 
     # keep summary toppers per period for dashboard cards
-    ranked_overall = sorted(
-        _dedupe_latest(all_docs),
-        key=lambda d: _sort_key(d, PLATFORM_CRITERIA.get(d.get("platform", ""), [])),
-    )
-    _store_period_summary("weekly", reference_date, ranked_overall)
-    _store_period_summary("monthly", reference_date, ranked_overall)
-    _store_period_summary("yearly", reference_date, ranked_overall)
-    _store_period_summary("contest", reference_date, ranked_overall)
+    deduped = _dedupe_latest(all_docs)
+    for period in ("weekly", "monthly", "yearly", "contest"):
+        period_docs = _period_docs(deduped, period, reference_date)
+        ranked_period = sorted(
+            period_docs,
+            key=lambda d: _sort_key(d, PLATFORM_CRITERIA.get(d.get("platform", ""), [])),
+        )
+        _store_period_summary(period, reference_date, ranked_period)
     return snapshots

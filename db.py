@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from uuid import uuid4
 
 from config import settings
 
@@ -15,7 +16,35 @@ logger = logging.getLogger("platstat.mongo")
 
 
 def _matches(doc, query):
-    return all(doc.get(k) == v for k, v in query.items())
+    for key, expected in query.items():
+        actual = doc.get(key)
+        if isinstance(expected, dict) and any(k.startswith("$") for k in expected):
+            for op, op_value in expected.items():
+                if op == "$exists":
+                    if (key in doc) != bool(op_value):
+                        return False
+                elif op == "$ne":
+                    if actual == op_value:
+                        return False
+                elif op == "$in":
+                    if actual not in op_value:
+                        return False
+                elif op == "$gt":
+                    if not (actual is not None and actual > op_value):
+                        return False
+                elif op == "$gte":
+                    if not (actual is not None and actual >= op_value):
+                        return False
+                elif op == "$lt":
+                    if not (actual is not None and actual < op_value):
+                        return False
+                elif op == "$lte":
+                    if not (actual is not None and actual <= op_value):
+                        return False
+                # unknown operators are ignored rather than silently failing the match
+        elif actual != expected:
+            return False
+    return True
 
 
 class MemoryCursor(list):
@@ -36,6 +65,11 @@ class MemoryCursor(list):
         return sum(1 for doc in self if _matches(doc, query))
 
 
+class InsertOneResult:
+    def __init__(self, inserted_id):
+        self.inserted_id = inserted_id
+
+
 class MemoryCollection:
     def __init__(self, name="memory"):
         self.name = name
@@ -43,8 +77,14 @@ class MemoryCollection:
 
     def insert_one(self, doc):
         payload = doc.copy()
+        if "_id" not in payload:
+            try:
+                from bson import ObjectId
+                payload["_id"] = ObjectId()
+            except Exception:
+                payload["_id"] = str(uuid4())
         self._docs.append(payload)
-        return payload
+        return InsertOneResult(payload["_id"])
 
     def insert_many(self, docs):
         for doc in docs:
@@ -159,6 +199,10 @@ class MongoStore:
         "jobs",
         "fetch_logs",
         "import_logs",
+        "contests",
+        "reminders",
+        "notifications",
+        "contest_sync_state",
     }
 
 
@@ -232,6 +276,16 @@ class MongoStore:
         self.jobs.create_index([("jobId", ASCENDING)], unique=True)
         self.jobs.create_index([("status", ASCENDING), ("updatedAt", DESCENDING)])
         self.rankings.create_index([("metric", ASCENDING), ("period", ASCENDING), ("snapshotKey", ASCENDING)], unique=True)
+        self.contests.create_index([("startTime", ASCENDING)])
+        self.contests.create_index([("platform", ASCENDING)])
+        self.contests.create_index([("externalId", ASCENDING)])
+        self.contests.create_index([("platform", ASCENDING), ("externalId", ASCENDING)], unique=True)
+        self.reminders.create_index([("userId", ASCENDING)])
+        self.reminders.create_index([("contestId", ASCENDING)])
+        self.reminders.create_index([("userId", ASCENDING), ("contestId", ASCENDING)], unique=True)
+        self.notifications.create_index([("userId", ASCENDING)])
+        self.notifications.create_index([("read", ASCENDING)])
+        self.notifications.create_index([("createdAt", DESCENDING)])
 
 
 class StoreProxy:

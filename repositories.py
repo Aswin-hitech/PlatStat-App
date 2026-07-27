@@ -216,14 +216,16 @@ class RankingRepository(BaseRepository):
         super().__init__("rankings")
 
     def upsert_snapshot(self, payload):
+        metric = payload.get("metric") or "platform_rankings"
         return self.update_one(
             {
+                "metric": metric,
                 "classId": payload.get("classId", "global"),
                 "platform": payload["platform"],
                 "period": payload["period"],
                 "snapshotKey": payload["snapshotKey"],
             },
-            payload,
+            {**payload, "metric": metric},
             upsert=True,
         )
 
@@ -236,3 +238,123 @@ class HistoryRepository(BaseRepository):
 class ImportLogRepository(BaseRepository):
     def __init__(self):
         super().__init__("import_logs")
+
+
+class ContestRepository(BaseRepository):
+    def __init__(self):
+        super().__init__("contests")
+
+    def upsert_contest(self, contest_doc):
+        platform = contest_doc.get("platform", "").lower().strip()
+        ext_id = str(contest_doc.get("externalId") or contest_doc.get("contestId") or "").strip()
+        query = {"platform": platform, "externalId": ext_id}
+        payload = {
+            "platform": platform,
+            "externalId": ext_id,
+            "contestId": contest_doc.get("contestId") or f"{platform}_{ext_id}",
+            "title": (contest_doc.get("title") or "").strip(),
+            "startTime": contest_doc.get("startTime"),
+            "duration": contest_doc.get("duration") or 0,
+            "url": contest_doc.get("url") or "",
+            "source": contest_doc.get("source") or "api",
+            "status": contest_doc.get("status") or "UPCOMING",
+            "lastSyncedAt": datetime.utcnow(),
+        }
+        return self.update_one(query, payload, upsert=True)
+
+
+class ReminderRepository(BaseRepository):
+    def __init__(self):
+        super().__init__("reminders")
+
+    def get_user_reminders(self, user_id="default_user"):
+        items = self.find({"userId": user_id})
+        cleaned = []
+        for it in items:
+            it_copy = dict(it)
+            if "_id" in it_copy:
+                it_copy["_id"] = str(it_copy["_id"])
+            cleaned.append(it_copy)
+        return cleaned
+
+    def find_reminder(self, user_id, contest_id):
+        return self.find_one({"userId": user_id, "contestId": contest_id})
+
+    def set_reminder(self, user_id, contest_id, platform, intervals=None, favorite=False):
+        intervals = intervals or ["1h", "30m", "live"]
+        query = {"userId": user_id, "contestId": contest_id}
+        payload = {
+            "userId": user_id,
+            "contestId": contest_id,
+            "platform": platform,
+            "intervals": intervals,
+            "favorite": bool(favorite),
+            "triggeredIntervals": [],
+        }
+        return self.update_one(query, payload, upsert=True)
+
+    def set_favorite(self, user_id, contest_id, platform, favorite=True):
+        query = {"userId": user_id, "contestId": contest_id}
+        doc = self.find_one(query)
+        intervals = doc.get("intervals", ["1h", "30m", "live"]) if doc else ["1h", "30m", "live"]
+        payload = {
+            "userId": user_id,
+            "contestId": contest_id,
+            "platform": platform,
+            "intervals": intervals,
+            "favorite": bool(favorite),
+        }
+        return self.update_one(query, payload, upsert=True)
+
+
+class NotificationRepository(BaseRepository):
+    def __init__(self):
+        super().__init__("notifications")
+
+    def create_notification(self, user_id, title, message, contest_id=None, n_type="reminder"):
+        doc = {
+            "notificationId": str(uuid.uuid4()),
+            "userId": user_id,
+            "title": title,
+            "message": message,
+            "contestId": contest_id,
+            "read": False,
+            "type": n_type,
+            "createdAt": datetime.utcnow(),
+        }
+        return self.create(doc)
+
+    def get_user_notifications(self, user_id="default_user", limit=50):
+        items = self.find({"userId": user_id}, sort=[("createdAt", -1)], limit=limit)
+        cleaned = []
+        for it in items:
+            it_copy = dict(it)
+            if "_id" in it_copy:
+                it_copy["_id"] = str(it_copy["_id"])
+            if isinstance(it_copy.get("createdAt"), datetime):
+                it_copy["createdAt"] = it_copy["createdAt"].isoformat()
+            cleaned.append(it_copy)
+        unread = self.count({"userId": user_id, "read": False})
+        return cleaned, unread
+
+    def mark_as_read(self, user_id, notification_id):
+        return self.update_one({"userId": user_id, "notificationId": notification_id}, {"read": True})
+
+    def clear_all(self, user_id="default_user"):
+        return self.delete({"userId": user_id})
+
+
+class ContestSyncStateRepository(BaseRepository):
+    def __init__(self):
+        super().__init__("contest_sync_state")
+
+    def record_sync(self, status="success", sync_count=0, errors=None):
+        payload = {
+            "stateKey": "global_sync",
+            "lastSyncTime": datetime.utcnow(),
+            "status": status,
+            "syncCount": sync_count,
+            "errors": errors or [],
+        }
+        return self.update_one({"stateKey": "global_sync"}, payload, upsert=True)
+

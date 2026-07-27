@@ -1,17 +1,17 @@
 from datetime import datetime
 
 
-def week_key(dt):
+def week_key(dt=None):
     dt = dt or datetime.utcnow()
     return f"{dt.isocalendar().year}-W{dt.isocalendar().week:02d}"
 
 
-def month_key(dt):
+def month_key(dt=None):
     dt = dt or datetime.utcnow()
     return f"{dt.year}-{dt.month:02d}"
 
 
-def year_key(dt):
+def year_key(dt=None):
     dt = dt or datetime.utcnow()
     return str(dt.year)
 

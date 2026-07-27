@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PlatStat - Contest Center</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <nav class="navbar">
+            <div class="nav-title">PlatStat</div>
+            <div class="nav-links">
+                <!-- <a href="/dashboard">Dashboard</a> -->
+                <a href="/">Analyzer</a>
+                <a href="/topper">Topper Calculator</a>
+                <a href="/contests" class="active">Contest Center</a>
+                <a href="/notifications">Notifications <span class="nav-badge" id="nav_unread_badge" style="display:none;">0</span></a>
+            </div>
+        </nav>
+
+        <!-- Page Header -->
+        <header class="page-header">
+            <span class="page-eyebrow">UNIFIED CONTEST CENTER</span>
+            <h1>Upcoming Competitive Contests</h1>
+            <p>Track schedule, live countdowns, and set multi-interval reminders for LeetCode, Codeforces, CodeChef, and AtCoder.</p>
+        </header>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="contest-toolbar">
+            <div class="search-input-wrapper" style="flex: 1; margin-bottom: 0;">
+                <input type="text" id="contest_search_input" placeholder="Search contest by title..." oninput="debounceFetchContests()">
+            </div>
+
+            <div class="platform-filter-tabs">
+                <button type="button" class="filter-tab active" data-platform="all" onclick="setPlatformFilter('all', this)">All</button>
+                <button type="button" class="filter-tab" data-platform="leetcode" onclick="setPlatformFilter('leetcode', this)">LeetCode</button>
+                <button type="button" class="filter-tab" data-platform="codeforces" onclick="setPlatformFilter('codeforces', this)">Codeforces</button>
+                <button type="button" class="filter-tab" data-platform="codechef" onclick="setPlatformFilter('codechef', this)">CodeChef</button>
+                <button type="button" class="filter-tab" data-platform="atcoder" onclick="setPlatformFilter('atcoder', this)">AtCoder</button>
+            </div>
+
+            <div class="toolbar-actions">
+                <button type="button" class="btn-toolbar-toggle" id="btn_fav_toggle" onclick="toggleFavoritesOnly()">⭐ Favorites</button>
+                <select id="sort_select" class="toolbar-select" onchange="loadContests()">
+                    <option value="nearest">Sort: Nearest</option>
+                    <option value="platform">Sort: Platform</option>
+                    <option value="duration">Sort: Duration</option>
+                </select>
+                <button type="button" class="btn-sync" onclick="triggerManualSync()">🔄 Sync</button>
+            </div>
+        </div>
+
+        <!-- Contest Cards Grid -->
+        <div id="contest_cards_grid" class="contest-cards-grid">
+            <div class="loading-state">Loading upcoming contests...</div>
+        </div>
+
+    </div>
+
+    <!-- Reminder Modal -->
+    <div class="modal" id="reminder_modal" style="display: none;">
+        <div class="modal-content">
+            <h3 style="font-family:'Outfit', sans-serif; font-size:1.4rem; color:var(--text-primary); margin-bottom:12px;">Set Contest Reminder</h3>
+            <p style="color:var(--text-secondary); font-size:14px; margin-bottom:20px;" id="reminder_contest_title">Select when you want to receive notification alerts before the contest starts.</p>
+
+            <form id="reminder_form" onsubmit="saveReminderSettings(event)">
+                <input type="hidden" id="modal_contest_id">
+                <input type="hidden" id="modal_platform">
+
+                <div class="reminder-option">
+                    <label><input type="checkbox" name="interval" value="1h" id="chk_1h" checked> 1 Hour Before</label>
+                </div>
+                <div class="reminder-option">
+                    <label><input type="checkbox" name="interval" value="30m" id="chk_30m" checked> 30 Minutes Before</label>
+                </div>
+                <div class="reminder-option">
+                    <label><input type="checkbox" name="interval" value="live" id="chk_live" checked> When Contest is Live 🔥</label>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+                    <button type="submit" class="btn-primary-cta" style="margin-top: 0; flex:1;">Save Reminder</button>
+                    <button type="button" class="btn-secondary" onclick="unsubscribeReminder()" style="background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.25); color: #dc2626;">Unsubscribe</button>
+                    <button type="button" class="btn-secondary" onclick="closeReminderModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentPlatform = 'all';
+        let favoritesOnly = false;
+        let contestsData = [];
+        let searchTimeout = null;
+
+        const PLATFORM_ICONS = {
+            'leetcode': '⚡',
+            'codeforces': '📊',
+            'codechef': '🍳',
+            'atcoder': '🎯'
+        };
+
+        function setPlatformFilter(plat, btnEl) {
+            currentPlatform = plat;
+            document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+            btnEl.classList.add('active');
+            loadContests();
+        }
+
+        function toggleFavoritesOnly() {
+            favoritesOnly = !favoritesOnly;
+            const btn = document.getElementById('btn_fav_toggle');
+            if (favoritesOnly) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+            loadContests();
+        }
+
+        function debounceFetchContests() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(loadContests, 300);
+        }
+
+        function loadContests() {
+            const grid = document.getElementById('contest_cards_grid');
+            const search = document.getElementById('contest_search_input').value;
+            const sort = document.getElementById('sort_select').value;
+
+            grid.innerHTML = '<div class="loading-state">Loading upcoming contests...</div>';
+
+            const queryParams = new URLSearchParams({
+                platform: currentPlatform,
+                search: search,
+                favorites: favoritesOnly,
+                sort: sort
+            });
+
+            fetch(`/api/contests?${queryParams}`)
+                .then(res => res.json())
+                .then(data => {
+                    contestsData = data.contests || [];
+                    renderContestCards(contestsData);
+                })
+                .catch(err => {
+                    console.error('Error fetching contests:', err);
+                    grid.innerHTML = '<div class="loading-state" style="color:var(--error-text);">Failed to load contests. Please try again.</div>';
+                });
+        }
+
+        function renderContestCards(contests) {
+            const grid = document.getElementById('contest_cards_grid');
+            grid.innerHTML = '';
+
+            if (!contests || contests.length === 0) {
+                grid.innerHTML = '<div class="loading-state">No upcoming contests found.</div>';
+                return;
+            }
+
+            contests.forEach(c => {
+                const icon = PLATFORM_ICONS[c.platform] || '🏆';
+                const card = document.createElement('div');
+                card.className = `contest-card plat-${c.platform}`;
+
+                card.innerHTML = `
+                    <div class="contest-card-header">
+                        <span class="platform-badge badge-${c.platform}">${icon} ${c.platform.toUpperCase()}</span>
+                        <div class="contest-card-actions">
+                            <button type="button" class="btn-icon-action ${c.isFavorite ? 'active-fav' : ''}" title="Favorite" onclick="toggleFavorite('${c.contestId}', '${c.platform}', ${!c.isFavorite})">
+                                ${c.isFavorite ? '⭐' : '☆'}
+                            </button>
+                            <button type="button" class="btn-icon-action ${c.isSubscribed ? 'active-rem' : ''}" title="Reminder" onclick="openReminderModal('${c.contestId}', '${c.platform}', '${encodeURIComponent(c.title)}', ${JSON.stringify(c.subscribedIntervals)})">
+                                🔔
+                            </button>
+                        </div>
+                    </div>
+                    <div class="contest-card-title">${c.title}</div>
+                    <div class="contest-card-meta">
+                        <div><span>📅 Date:</span> <strong>${c.startTimeFormatted}</strong></div>
+                        <div><span>⏱️ Duration:</span> <strong>${c.durationFormatted}</strong></div>
+                    </div>
+                    
+                    <!-- Real-Time Live Countdown -->
+                    <div class="countdown-container">
+                        <div class="countdown-label">STARTS IN</div>
+                        <div class="countdown-timer" id="timer_${c.contestId}" data-secs="${c.secondsRemaining}">
+                            ${formatCountdown(c.secondsRemaining)}
+                        </div>
+                    </div>
+
+                    <a href="${c.url}" target="_blank" rel="noopener noreferrer" class="btn-contest-link">GO TO CONTEST →</a>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        function formatCountdown(secs) {
+            if (secs <= 0) return "CODING NOW!";
+            const d = Math.floor(secs / 86400);
+            const h = Math.floor((secs % 86400) / 3600);
+            const m = Math.floor((secs % 3600) / 60);
+            const s = secs % 60;
+            return `${d}d ${h < 10 ? '0'+h : h}h ${m < 10 ? '0'+m : m}m ${s < 10 ? '0'+s : s}s`;
+        }
+
+        // Real-Time 1-second loop update
+        setInterval(() => {
+            document.querySelectorAll('.countdown-timer').forEach(el => {
+                let secs = parseInt(el.getAttribute('data-secs') || '0', 10);
+                if (secs > 0) {
+                    secs -= 1;
+                    el.setAttribute('data-secs', secs);
+                    el.textContent = formatCountdown(secs);
+                }
+            });
+        }, 1000);
+
+        // Actions
+        function toggleFavorite(cid, platform, newState) {
+            fetch(`/api/contests/${cid}/favorite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: platform, favorite: newState })
+            })
+            .then(res => res.json())
+            .then(() => loadContests());
+        }
+
+        function openReminderModal(cid, platform, titleEnc, intervals) {
+            document.getElementById('modal_contest_id').value = cid;
+            document.getElementById('modal_platform').value = platform;
+            document.getElementById('reminder_contest_title').textContent = `Set reminder alerts for: ${decodeURIComponent(titleEnc)}`;
+            
+            const activeInts = intervals || ['1h', '30m', 'live'];
+            document.getElementById('chk_1h').checked = activeInts.includes('1h');
+            document.getElementById('chk_30m').checked = activeInts.includes('30m');
+            document.getElementById('chk_live').checked = activeInts.includes('live');
+            
+            document.getElementById('reminder_modal').style.display = 'flex';
+        }
+
+        function closeReminderModal() {
+            document.getElementById('reminder_modal').style.display = 'none';
+        }
+
+        function saveReminderSettings(e) {
+            e.preventDefault();
+            const cid = document.getElementById('modal_contest_id').value;
+            const platform = document.getElementById('modal_platform').value;
+            const intervals = [];
+            if (document.getElementById('chk_1h').checked) intervals.push('1h');
+            if (document.getElementById('chk_30m').checked) intervals.push('30m');
+            if (document.getElementById('chk_live').checked) intervals.push('live');
+
+            fetch(`/api/contests/${cid}/subscribe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: platform, intervals: intervals })
+            })
+            .then(res => res.json())
+            .then(() => {
+                closeReminderModal();
+                loadContests();
+                loadNotifications();
+            });
+        }
+
+        function unsubscribeReminder() {
+            const cid = document.getElementById('modal_contest_id').value;
+            fetch(`/api/contests/${cid}/unsubscribe`, { method: 'POST' })
+            .then(res => res.json())
+            .then(() => {
+                closeReminderModal();
+                loadContests();
+            });
+        }
+
+        function triggerManualSync() {
+            const grid = document.getElementById('contest_cards_grid');
+            grid.innerHTML = '<div class="loading-state">Syncing contests from APIs...</div>';
+            fetch('/api/contests/sync', { method: 'POST' })
+            .then(res => res.json())
+            .then(() => loadContests());
+        }
+
+        function loadNotifications() {
+            fetch('/api/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const badge = document.getElementById('nav_unread_badge');
+                    if (badge) {
+                        if (data.unreadCount > 0) {
+                            badge.textContent = data.unreadCount;
+                            badge.style.display = 'inline-block';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(err => console.error('Error loading notifications:', err));
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadContests();
+            loadNotifications();
+        });
+    </script>
+</body>
+</html>

@@ -6,16 +6,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body class="results-page">
-    <nav class="navbar navbar-glass">
-        <div class="nav-title">PlatStat</div>
-        <div class="nav-links">
-            <a href="/">Home</a>
-            <a href="/dashboard">Dashboard</a>
-            <a href="/topper">Topper Calculator</a>
-        </div>
-    </nav>
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <nav class="navbar">
+            <div class="nav-title">PlatStat</div>
+            <div class="nav-links">
+                <!-- <a href="/dashboard" class="active">Dashboard</a> -->
+                <a href="/">Analyzer</a>
+                <a href="/topper">Topper Calculator</a>
+                <a href="/contests">Contest Center</a>
+                <a href="/notifications">Notifications <span class="nav-badge" id="nav_unread_badge" style="display:none;">0</span></a>
+            </div>
+        </nav>
 
-    <div class="wide-card">
+        <!-- Dashboard Contest Widget -->
+        <div class="card-section" style="margin-bottom: 32px;">
+            <div class="section-title">
+                <span>🏆 Upcoming Contests Overview</span>
+                <a href="/contests" style="text-decoration:none;"><span class="badge" style="cursor:pointer;">View Contest Center →</span></a>
+            </div>
+
+            <div id="dash_contest_widget_content" style="display:flex; flex-wrap:wrap; gap:24px; align-items:center; justify-content:space-between;">
+                <div style="flex:1; min-width:280px;">
+                    <div style="font-size:12px; font-weight:800; color:var(--text-accent); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px;">NEXT UPCOMING CONTEST</div>
+                    <div id="widget_next_title" style="font-family:'Outfit', sans-serif; font-weight:800; font-size:20px; color:#fff; margin-bottom:8px;">Loading...</div>
+                    <div id="widget_next_time" style="font-size:13px; color:var(--text-secondary);">Starts soon</div>
+                </div>
+
+                <div style="background:rgba(3,10,24,0.7); border:1px solid var(--input-border); border-radius:var(--radius-md); padding:16px 24px; text-align:center; min-width:180px;">
+                    <div style="font-size:11px; font-weight:800; color:var(--text-accent); letter-spacing:0.1em;">THIS WEEK</div>
+                    <div id="widget_week_count" style="font-family:'Outfit', sans-serif; font-weight:900; font-size:28px; color:var(--cyan-glow);">0</div>
+                    <div style="font-size:11px; color:var(--text-muted);">Contests</div>
+                </div>
+
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <span class="file-tag" id="badge_lc_count">LeetCode: 0</span>
+                    <span class="file-tag" id="badge_cf_count">Codeforces: 0</span>
+                    <span class="file-tag" id="badge_cc_count">CodeChef: 0</span>
+                    <span class="file-tag" id="badge_ac_count">AtCoder: 0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="wide-card">
         <div class="hero">
             <div>
                 <p class="eyebrow">Class Management</p>
@@ -128,6 +161,51 @@
                 });
             }
         }
+
+        function loadDashboardContestWidget() {
+            fetch('/api/dashboard/contest-widget')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.nextContest) {
+                        document.getElementById('widget_next_title').textContent = `${data.nextContest.title} (${data.nextContest.platform.toUpperCase()})`;
+                        document.getElementById('widget_next_time').textContent = `Date: ${data.nextContest.startTimeFormatted}`;
+                    } else {
+                        document.getElementById('widget_next_title').textContent = "No upcoming contests";
+                        document.getElementById('widget_next_time').textContent = "Check back later";
+                    }
+
+                    document.getElementById('widget_week_count').textContent = data.contestsThisWeek || 0;
+                    
+                    const pCounts = data.platformCounts || {};
+                    document.getElementById('badge_lc_count').textContent = `LeetCode: ${pCounts.leetcode || 0}`;
+                    document.getElementById('badge_cf_count').textContent = `Codeforces: ${pCounts.codeforces || 0}`;
+                    document.getElementById('badge_cc_count').textContent = `CodeChef: ${pCounts.codechef || 0}`;
+                    document.getElementById('badge_ac_count').textContent = `AtCoder: ${pCounts.atcoder || 0}`;
+                })
+                .catch(err => console.error('Error loading dashboard widget:', err));
+        }
+
+        function loadNavNotifications() {
+            fetch('/api/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const badge = document.getElementById('nav_unread_badge');
+                    if (badge) {
+                        if (data.unreadCount > 0) {
+                            badge.textContent = data.unreadCount;
+                            badge.style.display = 'inline-block';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(err => console.error('Error loading notifications:', err));
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboardContestWidget();
+            loadNavNotifications();
+        });
     </script>
 </body>
 </html>
