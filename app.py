@@ -1,7 +1,7 @@
 from io import BytesIO
 
 import pandas as pd
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 
 from parsers.csv_parser import parse_csv
 from parsers.excel_parser import parse_excel
@@ -187,6 +187,11 @@ def _tables_to_excel_stream(tables):
 
     output.seek(0)
     return output
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(app.static_folder, "favicon.ico", mimetype="image/vnd.microsoft.icon")
 
 
 @app.route("/api/leetcode/contests", methods=["GET"])

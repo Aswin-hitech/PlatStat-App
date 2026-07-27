@@ -98,6 +98,27 @@ body::before {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.nav-brand:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.nav-logo {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+    border-radius: 8px;
+    filter: drop-shadow(0 2px 8px rgba(43, 140, 255, 0.25));
+}
+
 .nav-title {
     font-family: 'Outfit', sans-serif;
     font-weight: 900;
@@ -109,16 +130,6 @@ body::before {
     gap: 10px;
     background: none;
     -webkit-text-fill-color: var(--text-primary);
-}
-
-.nav-title::before {
-    content: '';
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--accent-blue);
-    box-shadow: 0 0 12px var(--cyan-glow);
 }
 
 .nav-links {
