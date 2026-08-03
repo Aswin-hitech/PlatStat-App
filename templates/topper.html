@@ -50,7 +50,7 @@
                 <div class="form-grid">
                     <div class="input-field-group">
                         <label>Select Platform</label>
-                        <select name="platform" required style="padding: 16px; background: var(--input-bg); color:#fff; border:1px solid var(--input-border); border-radius: var(--radius-sm); font-size:15px; font-weight:600;">
+                        <select name="platform" required style="padding: 16px; background: var(--input-bg); color:var(--text-primary); border:1px solid var(--input-border); border-radius: var(--radius-sm); font-size:15px; font-weight:600;">
                             <option value="">Choose a platform...</option>
                             <option value="leetcode" {% if request.form.get('platform') == 'leetcode' %}selected{% endif %}>LeetCode</option>
                             <option value="codeforces" {% if request.form.get('platform') == 'codeforces' %}selected{% endif %}>Codeforces</option>
@@ -60,7 +60,7 @@
 
                     <div class="input-field-group">
                         <label>Select Month</label>
-                        <select name="month" required style="padding: 16px; background: var(--input-bg); color:#fff; border:1px solid var(--input-border); border-radius: var(--radius-sm); font-size:15px; font-weight:600;">
+                        <select name="month" required style="padding: 16px; background: var(--input-bg); color:var(--text-primary); border:1px solid var(--input-border); border-radius: var(--radius-sm); font-size:15px; font-weight:600;">
                             <option value="">Choose a month...</option>
                             {% for number, label in [(1, 'January'), (2, 'February'), (3, 'March'), (4, 'April'), (5, 'May'), (6, 'June'), (7, 'July'), (8, 'August'), (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December')] %}
                             <option value="{{ number }}" {% if request.form.get('month') == number|string %}selected{% endif %}>{{ label }}</option>
@@ -70,12 +70,12 @@
 
                     <div class="input-field-group">
                         <label>Upload CSV or Excel File</label>
-                        <input type="file" name="sheet" accept=".csv,.xlsx,.xls" required style="padding: 14px; background: var(--input-bg); color:#fff; border:1px dashed var(--input-border); border-radius: var(--radius-sm);">
+                        <input type="file" name="sheet" accept=".csv,.xlsx,.xls" required style="padding: 14px; background: var(--input-bg); color:var(--text-primary); border:1px dashed var(--input-border); border-radius: var(--radius-sm);">
                     </div>
 
                     <div class="input-field-group">
                         <label>Show Results</label>
-                        <select name="view_mode" style="padding: 16px; background: var(--input-bg); color:#fff; border:1px solid var(--input-border); border-radius: var(--radius-sm); font-size:15px; font-weight:600;">
+                        <select name="view_mode" style="padding: 16px; background: var(--input-bg); color:var(--text-primary); border:1px solid var(--input-border); border-radius: var(--radius-sm); font-size:15px; font-weight:600;">
                             <option value="both" {% if view_mode == 'both' %}selected{% endif %}>Top 5 and Top 10</option>
                             <option value="5" {% if view_mode == '5' %}selected{% endif %}>Top 5 only</option>
                             <option value="10" {% if view_mode == '10' %}selected{% endif %}>Top 10 only</option>

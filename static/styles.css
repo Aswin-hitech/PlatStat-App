@@ -825,6 +825,7 @@ tbody tr:hover {
     .platform-grid {
         gap: 10px;
     }
+}
 
 @media (max-width: 768px) {
     .navbar {
@@ -900,7 +901,7 @@ tbody tr:hover {
 /* ====================================================
    BEAUTIFUL SAMSUNG BLUE BUTTON SYSTEM
 ==================================================== */
-button, .btn-primary-cta, .btn-secondary, .btn-download-excel, .btn-sync {
+button, input[type="submit"], input[type="button"], .btn, .btn-primary-cta, .btn-secondary, .btn-download-excel, .btn-sync, .primary-button, .ghost-button {
     font-family: 'Outfit', sans-serif;
     font-weight: 800;
     font-size: 14px;
@@ -914,10 +915,11 @@ button, .btn-primary-cta, .btn-secondary, .btn-download-excel, .btn-sync {
     justify-content: center;
     gap: 10px;
     text-decoration: none;
+    box-sizing: border-box;
 }
 
 /* Primary CTA Button - Samsung Cobalt Blue Gradient with Cyan Glow */
-.btn-primary-cta {
+.btn-primary-cta, input[type="submit"].btn-primary-cta {
     width: 100%;
     padding: 18px 32px;
     background: linear-gradient(135deg, #0070f3 0%, #1428a0 100%);
@@ -928,16 +930,47 @@ button, .btn-primary-cta, .btn-secondary, .btn-download-excel, .btn-sync {
     margin-top: 24px;
 }
 
-.btn-primary-cta:hover {
+.btn-primary-cta:hover, input[type="submit"].btn-primary-cta:hover {
     background: linear-gradient(135deg, #0080ff 0%, #1a32c4 100%);
     border-color: #00f0ff;
     transform: translateY(-3px);
     box-shadow: 0 14px 36px rgba(0, 112, 243, 0.5), 0 0 20px rgba(0, 240, 255, 0.4);
 }
 
-.btn-primary-cta:active {
+.btn-primary-cta:active, input[type="submit"].btn-primary-cta:active {
     transform: translateY(-1px);
     box-shadow: 0 4px 16px rgba(0, 112, 243, 0.3);
+}
+
+/* Primary Modal / Generic Action Button */
+.primary-button, .btn-primary {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #0070f3 0%, #1428a0 100%);
+    color: #ffffff !important;
+    border: 1px solid rgba(0, 240, 255, 0.4);
+    box-shadow: 0 6px 20px rgba(0, 112, 243, 0.3);
+}
+
+.primary-button:hover, .btn-primary:hover {
+    background: linear-gradient(135deg, #0080ff 0%, #1a32c4 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(0, 112, 243, 0.45);
+}
+
+/* Ghost / Secondary Modal Cancel Button */
+.ghost-button {
+    padding: 12px 24px;
+    background: rgba(255, 255, 255, 0.8);
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--card-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ghost-button:hover {
+    background: #ffffff;
+    border-color: var(--accent-blue);
+    color: var(--text-primary) !important;
+    transform: translateY(-2px);
 }
 
 /* Secondary Action Button - Soft Frosted Glassmorphism */
@@ -1368,5 +1401,4 @@ button, .btn-primary-cta, .btn-secondary, .btn-download-excel, .btn-sync {
     align-items: center;
     gap: 12px;
     cursor: pointer;
-}
 }

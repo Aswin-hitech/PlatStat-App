@@ -224,7 +224,10 @@ class FetchEngine:
                 results.append(result.data)
             else:
                 failed += 1
-            time.sleep(1 / max(settings.MAX_CONCURRENT_FETCHES, 1))
+            if platform == "codechef":
+                time.sleep(1.2)
+            else:
+                time.sleep(1 / max(settings.MAX_CONCURRENT_FETCHES, 1))
 
         job["rows"] = rows
         job["_prepared"] = prepared
