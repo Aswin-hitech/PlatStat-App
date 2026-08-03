@@ -56,18 +56,7 @@ def format_contest_date(dt_str):
 
 
 def get_latest_cc_contests(limit=6):
-    """Fetch the latest past CodeChef contests (Starters and Monday Munch only) with title, code, and dates.
-
-    Returns:
-    [
-        {
-            "title": "Starters 249 (Rated)",
-            "code": "START249",
-            "date": "2026-07-29"
-        },
-        ...
-    ]
-    """
+    """Fetch the latest past CodeChef contests (Starters and Monday Munch only) with title, code, and dates."""
     url = "https://www.codechef.com/api/list/contests/all?sort_by=END&sorting_order=desc&offset=0&limit=60"
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -92,7 +81,6 @@ def get_latest_cc_contests(limit=6):
             if not ("starters" in name_lower or "monday munch" in name_lower or "dsa" in name_lower):
                 continue
 
-            # Format date to YYYY-MM-DD
             dt_str = start_iso[:10] if start_iso else (c.get("contest_start_date") or "")
 
             if name and code:
@@ -160,20 +148,37 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
 
     try:
         soup = BeautifulSoup(html, "html.parser")
-        header = soup.select_one(".rating-header")
+
+        # Determine target rating container:
+        # If target contest is a DSA / Monday Munch contest, pick #rating-block-dsa-monday
+        is_dsa_contest = False
+        if target_contest_title:
+            t_low = target_contest_title.lower()
+            if "dsa" in t_low or "monday" in t_low:
+                is_dsa_contest = True
+
+        target_container = None
+        if is_dsa_contest:
+            target_container = soup.select_one("#rating-block-dsa-monday") or soup.select_one('[id*="dsa"]')
+
+        if not target_container:
+            target_container = soup.select_one("#rating-block-all") or soup
+
+        container_text = target_container.get_text(" ", strip=True)
 
         # ====================================
         # RATING & STARS
         # ====================================
-        rating_el = soup.select_one(".rating-number")
+        rating_el = target_container.select_one(".rating-number")
         if rating_el:
-            row["Current Rating"] = rating_el.text.strip()
+            r_txt = rating_el.text.strip()
+            row["Current Rating"] = r_txt if r_txt else "AB"
         else:
-            m_rat = re.search(r"(\d{3,4})\s*\(\s*Rating\s*\)", html, re.I)
+            m_rat = re.search(r"(\d{3,4})\s*\(\s*Rating\s*\)", container_text, re.I)
             if m_rat:
                 row["Current Rating"] = m_rat.group(1)
 
-        star_el = soup.select_one(".rating-star")
+        star_el = target_container.select_one(".rating-star")
         star_val = star_to_number(safe_text(star_el))
         if star_val:
             row["Star Rating"] = star_val
@@ -181,18 +186,18 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
         # ====================================
         # HIGHEST RATING & DIVISION
         # ====================================
-        highest_m = re.search(r"Highest Rating\s*\(?(\d+)\)?", html, re.I)
+        highest_m = re.search(r"Highest Rating\s*\(?(\d+)\)?", container_text, re.I)
         if highest_m:
             row["Highest Rating"] = highest_m.group(1)
 
-        div_m = re.search(r"Div\s*\d+", html, re.I)
+        div_m = re.search(r"Div\s*\d+", container_text, re.I)
         if div_m:
             row["Division"] = div_m.group(0).capitalize()
 
         # ====================================
         # GLOBAL + COUNTRY RANK
         # ====================================
-        rank_items = soup.select(".rating-ranks li")
+        rank_items = target_container.select(".rating-ranks li")
         for li in rank_items:
             txt = li.get_text(" ", strip=True)
             a = li.find("a")
@@ -206,7 +211,7 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
 
             if "Country" in txt or "filterBy=Country" in href:
                 row["Country Ranking"] = val
-            elif "Global" in txt or "/ratings/all" in href:
+            elif "Global" in txt or "/ratings/all" in href or "dsa-monday" in href:
                 row["Global Rank"] = val
 
         # ====================================
@@ -224,7 +229,7 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
                         break
 
         # ====================================
-        # TOTAL PROBLEMS SOLVED & TARGET CONTEST SOLVED
+        # TOTAL PROBLEMS SOLVED
         # ====================================
         prob_m = re.search(r"Total Problems Solved:\s*(\d+)", html, re.I)
         if prob_m:
