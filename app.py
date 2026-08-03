@@ -5,7 +5,7 @@ from flask import Flask, jsonify, render_template, request, send_file, send_from
 
 from parsers.csv_parser import parse_csv
 from parsers.excel_parser import parse_excel
-from services.codechef_service import get_cc_summary
+from services.codechef_service import get_cc_summary, get_latest_cc_contests
 from services.codeforces_service import get_cf_summary
 from services.contest_scheduler import contest_scheduler
 from services.contest_service import contest_service
@@ -102,7 +102,7 @@ def _load_rows(uploaded_file):
     return None
 
 
-def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_time=None):
+def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_time=None, selected_cc_title=None, selected_cc_date=None):
     tables = {"codeforces": [], "codechef": [], "leetcode": []}
 
     latest_lc_title = selected_lc_title
@@ -126,7 +126,7 @@ def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_
         if "codechef" in selected_platforms:
             handle = _clean_text(row.get("codechef"))
             if handle:
-                tables["codechef"].append(get_cc_summary(idx, name, regno, dept, handle))
+                tables["codechef"].append(get_cc_summary(idx, name, regno, dept, handle, target_contest_title=selected_cc_title, target_contest_date=selected_cc_date))
 
         if "leetcode" in selected_platforms:
             handle = _clean_text(row.get("leetcode"))
@@ -203,6 +203,15 @@ def api_leetcode_contests():
         return jsonify({"error": f"Failed to fetch LeetCode contests from API: {str(e)}", "contests": []}), 500
 
 
+@app.route("/api/codechef/contests", methods=["GET"])
+def api_codechef_contests():
+    try:
+        contests = get_latest_cc_contests(6)
+        return jsonify({"contests": contests})
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch CodeChef contests from API: {str(e)}", "contests": []}), 500
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "GET":
@@ -231,6 +240,19 @@ def index():
         except Exception as e:
             return render_template("index.html", error=f"Failed to fetch LeetCode contests from API: {str(e)}"), 500
 
+    selected_cc_title = None
+    selected_cc_date = None
+    if "codechef" in selected_platforms:
+        selected_cc_title = _clean_text(request.form.get("codechef_contest"))
+        if selected_cc_title:
+            try:
+                cc_contests = get_latest_cc_contests(10)
+                matched_cc = next((c for c in cc_contests if c["title"] == selected_cc_title), None)
+                if matched_cc:
+                    selected_cc_date = matched_cc["date"]
+            except Exception:
+                pass
+
     uploaded_file = request.files.get("csvfile")
     rows = []
 
@@ -253,7 +275,7 @@ def index():
             error="Provide at least one platform ID for the selected platforms.",
         ), 400
 
-    tables = _analyze_rows(rows, selected_platforms, selected_lc_title, selected_lc_time)
+    tables = _analyze_rows(rows, selected_platforms, selected_lc_title, selected_lc_time, selected_cc_title, selected_cc_date)
 
     global cache_tables
     cache_tables = tables

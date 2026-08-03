@@ -45,6 +45,71 @@ def star_to_number(text):
     return None
 
 
+def format_contest_date(dt_str):
+    """Format YYYY-MM-DD to DD.MM.YYYY"""
+    if not dt_str:
+        return today_ddmmyyyy()
+    parts = dt_str.split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        return f"{parts[2]}.{parts[1]}.{parts[0]}"
+    return dt_str
+
+
+def get_latest_cc_contests(limit=6):
+    """Fetch the latest past CodeChef contests (Starters and Monday Munch only) with title, code, and dates.
+
+    Returns:
+    [
+        {
+            "title": "Starters 249 (Rated)",
+            "code": "START249",
+            "date": "2026-07-29"
+        },
+        ...
+    ]
+    """
+    url = "https://www.codechef.com/api/list/contests/all?sort_by=END&sorting_order=desc&offset=0&limit=60"
+    headers = {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "application/json, text/plain, */*",
+    }
+
+    try:
+        r = requests.get(url, headers=headers, timeout=12)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        past = data.get("past_contests") or []
+
+        result = []
+        for c in past:
+            name = c.get("contest_name") or ""
+            code = c.get("contest_code") or ""
+            start_iso = c.get("contest_start_date_iso") or ""
+
+            # Filter ONLY Starters and Monday Munch (DSA Munch)
+            name_lower = name.lower()
+            if not ("starters" in name_lower or "monday munch" in name_lower or "dsa" in name_lower):
+                continue
+
+            # Format date to YYYY-MM-DD
+            dt_str = start_iso[:10] if start_iso else (c.get("contest_start_date") or "")
+
+            if name and code:
+                result.append({
+                    "title": name,
+                    "code": code,
+                    "date": dt_str
+                })
+                if len(result) >= limit:
+                    break
+
+        return result
+    except Exception as e:
+        print("Error fetching CodeChef contests:", e)
+        return []
+
+
 def fetch_codechef_profile(user, max_retries=3):
     """Fetch CodeChef profile HTML with session retries and exponential backoff for HTTP 429."""
     url = f"https://www.codechef.com/users/{user}"
@@ -56,7 +121,6 @@ def fetch_codechef_profile(user, max_retries=3):
             if r.status_code == 200:
                 return r.text
             elif r.status_code == 429:
-                # Throttled by CodeChef, back off before retry
                 wait = (attempt + 1) * 2 + random.uniform(0.5, 1.5)
                 time.sleep(wait)
             elif r.status_code in (404, 403):
@@ -67,13 +131,15 @@ def fetch_codechef_profile(user, max_retries=3):
     return None
 
 
-def get_cc_summary(sn, name, regno, dept, user):
+def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, target_contest_date=None):
+    output_date = format_contest_date(target_contest_date) if target_contest_date else today_ddmmyyyy()
+
     row = {
         "S. No": sn,
         "Name of the Student": name,
         "Register No": regno,
         "Dept": dept,
-        "Date": today_ddmmyyyy(),
+        "Date": output_date,
         "Current Rating": "AB",
         "Highest Rating": "AB",
         "Division": "AB",
@@ -82,6 +148,7 @@ def get_cc_summary(sn, name, regno, dept, user):
         "Country Ranking": "AB",
         "Contest participated": "AB",
         "Problems Solved": "AB",
+        "Target Contest Solved": "AB",
     }
 
     if not user or not user.strip():
@@ -94,7 +161,6 @@ def get_cc_summary(sn, name, regno, dept, user):
     try:
         soup = BeautifulSoup(html, "html.parser")
         header = soup.select_one(".rating-header")
-        page_text = soup.get_text(" ", strip=True)
 
         # ====================================
         # RATING & STARS
@@ -132,7 +198,6 @@ def get_cc_summary(sn, name, regno, dept, user):
             a = li.find("a")
             href = a.get("href", "") if a else ""
 
-            # Extract numeric value if present
             num_m = re.search(r"(\d+)", txt)
             val = num_m.group(1) if num_m else ("Inactive" if "Inactive" in txt else None)
 
@@ -159,21 +224,18 @@ def get_cc_summary(sn, name, regno, dept, user):
                         break
 
         # ====================================
-        # TOTAL PROBLEMS SOLVED
+        # TOTAL PROBLEMS SOLVED & TARGET CONTEST SOLVED
         # ====================================
-        # Primary: Exact Total Problems Solved header/text
         prob_m = re.search(r"Total Problems Solved:\s*(\d+)", html, re.I)
         if prob_m:
             row["Problems Solved"] = prob_m.group(1)
         else:
-            # Fallback 1: Check section.problems-solved header
             p_el = soup.select_one(".problems-solved h3")
             if p_el:
                 p_m = re.search(r"(\d+)", p_el.get_text())
                 if p_m:
                     row["Problems Solved"] = p_m.group(1)
 
-            # Fallback 2: Count commas across problem blocks if header missing
             if row["Problems Solved"] == "AB":
                 total_solved_count = 0
                 for sec in soup.select("section.problems-solved .content"):
@@ -182,6 +244,27 @@ def get_cc_summary(sn, name, regno, dept, user):
                         total_solved_count += p.get_text(strip=True).count(",") + 1
                 if total_solved_count > 0:
                     row["Problems Solved"] = str(total_solved_count)
+
+        # Target Contest Matching
+        if target_contest_title:
+            target_norm = target_contest_title.lower().strip()
+            target_num_m = re.search(r"(starters\s*\d+|monday munch[^\(]*)", target_norm, re.I)
+            key_search = target_num_m.group(1).strip() if target_num_m else target_norm
+
+            sections = soup.select("section.problems-solved .content")
+            for sec in sections:
+                title_el = sec.find("h5")
+                if not title_el:
+                    continue
+                sec_title = title_el.get_text(strip=True).lower()
+                if key_search in sec_title or target_norm in sec_title:
+                    p = sec.find("p")
+                    if p and p.get_text(strip=True):
+                        cnt = p.get_text(strip=True).count(",") + 1
+                        row["Target Contest Solved"] = cnt
+                    else:
+                        row["Target Contest Solved"] = 0
+                    break
 
         return row
 

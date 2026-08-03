@@ -93,7 +93,7 @@ class FetchEngine:
             return f"https://leetcode.com/u/{platform_id}"
         return ""
 
-    def _call_scraper(self, platform, row, idx, latest_lc_title=None, latest_lc_time=None):
+    def _call_scraper(self, platform, row, idx, latest_lc_title=None, latest_lc_time=None, target_cc_title=None):
         name = (row.get("studentName") or row.get("name") or "").strip()
         regno = (row.get("register_no") or row.get("registerNo") or "").strip()
         dept = (row.get("department") or "").strip()
@@ -103,17 +103,17 @@ class FetchEngine:
         if platform == "codeforces":
             return get_cf_summary(idx, name, regno, dept, platform_id)
         if platform == "codechef":
-            return get_cc_summary(idx, name, regno, dept, platform_id)
+            return get_cc_summary(idx, name, regno, dept, platform_id, target_contest_title=target_cc_title)
         if platform == "leetcode":
             return get_lc_summary(idx, name, regno, dept, platform_id, latest_lc_title, latest_lc_time)
         return None
 
-    def _run_single(self, platform, row, idx, class_id, latest_lc_title=None, latest_lc_time=None):
+    def _run_single(self, platform, row, idx, class_id, latest_lc_title=None, latest_lc_time=None, target_cc_title=None):
         platform_id = (row.get(platform) or "").strip()
         profile_url = self._build_profile_url(platform, platform_id, row)
         for attempt in range(settings.FETCH_RETRIES):
             try:
-                result = self._call_scraper(platform, row, idx, latest_lc_title, latest_lc_time)
+                result = self._call_scraper(platform, row, idx, latest_lc_title, latest_lc_time, target_cc_title)
                 if not result:
                     continue
                 snapshot = {

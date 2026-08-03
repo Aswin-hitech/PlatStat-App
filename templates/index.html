@@ -88,7 +88,7 @@
                     <div id="leetcode_contest_section" class="contest-picker-section">
                         <label for="leetcode_contest_search">
                             <span>Select LeetCode Contest</span>
-                            <span style="color:var(--cyan-glow); font-size:12px;">REQUIRED</span>
+                            <span style="color:var(--text-accent); font-size:12px;">REQUIRED</span>
                         </label>
                         
                         <div class="search-input-wrapper">
@@ -104,6 +104,28 @@
                         <select name="leetcode_contest" id="leetcode_contest_select"></select>
 
                         <div id="lc_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
+                    </div>
+
+                    <!-- Custom CodeChef Contest Selector Section -->
+                    <div id="codechef_contest_section" class="contest-picker-section" style="margin-top: 16px;">
+                        <label for="codechef_contest_search">
+                            <span>Select CodeChef Contest</span>
+                            <span style="color:var(--text-accent); font-size:12px;">TARGET CONTEST</span>
+                        </label>
+                        
+                        <div class="search-input-wrapper">
+                            <input type="text" id="codechef_contest_search" placeholder="Search CodeChef contest..." oninput="filterCCContestsUI()">
+                        </div>
+
+                        <!-- Custom CodeChef Contest Card List -->
+                        <div id="cc_contest_list_cards" class="contest-list-cards">
+                            <div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">Loading CodeChef contests...</div>
+                        </div>
+
+                        <!-- Hidden Select Fallback for Backend Form Compatibility -->
+                        <select name="codechef_contest" id="codechef_contest_select"></select>
+
+                        <div id="cc_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
                     </div>
                 </div>
 
@@ -187,6 +209,8 @@
     <script>
         let fetchedContests = [];
         let selectedContestTitle = '';
+        let fetchedCCContests = [];
+        let selectedCCContestTitle = '';
 
         // Platform Card Toggle Logic
         function togglePlatform(platform) {
@@ -202,6 +226,9 @@
 
             if (platform === 'leetcode') {
                 loadLeetCodeContests();
+            }
+            if (platform === 'codechef') {
+                loadCodeChefContests();
             }
         }
 
@@ -302,6 +329,103 @@
         function filterContestsUI() {
             if (fetchedContests.length > 0) {
                 renderContestCards(fetchedContests);
+            }
+        }
+
+        // Fetch & Render Custom CodeChef Contests
+        function loadCodeChefContests() {
+            const ccSection = document.getElementById('codechef_contest_section');
+            const ccCheckbox = document.getElementById('platform_codechef');
+            const cardsContainer = document.getElementById('cc_contest_list_cards');
+            const hiddenSelect = document.getElementById('codechef_contest_select');
+            const errDiv = document.getElementById('cc_contest_error');
+
+            if (!ccCheckbox || !ccCheckbox.checked) {
+                if (ccSection) ccSection.style.display = 'none';
+                return;
+            }
+
+            ccSection.style.display = 'block';
+
+            if (fetchedCCContests.length > 0) {
+                renderCCContestCards(fetchedCCContests);
+                return;
+            }
+
+            cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">Loading CodeChef contests...</div>';
+            errDiv.style.display = 'none';
+
+            fetch('/api/codechef/contests')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error || !data.contests || data.contests.length === 0) {
+                        const errMsg = data.error || 'Failed to load CodeChef contests from API.';
+                        cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--error-text); font-size:13px;">Unable to fetch CodeChef contests</div>';
+                        errDiv.textContent = errMsg;
+                        errDiv.style.display = 'block';
+                    } else {
+                        fetchedCCContests = data.contests;
+                        renderCCContestCards(fetchedCCContests);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching CC contests:', err);
+                    cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--error-text); font-size:13px;">Unable to fetch CodeChef contests</div>';
+                    errDiv.textContent = 'Failed to load CodeChef contests. Please try again.';
+                    errDiv.style.display = 'block';
+                });
+        }
+
+        function renderCCContestCards(contests) {
+            const cardsContainer = document.getElementById('cc_contest_list_cards');
+            const hiddenSelect = document.getElementById('codechef_contest_select');
+            const searchVal = (document.getElementById('codechef_contest_search').value || '').toLowerCase();
+            
+            cardsContainer.innerHTML = '';
+            hiddenSelect.innerHTML = '';
+
+            const filtered = contests.filter(c => 
+                c.title.toLowerCase().includes(searchVal) || c.code.toLowerCase().includes(searchVal) || c.date.includes(searchVal)
+            );
+
+            if (filtered.length === 0) {
+                cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">No matching CodeChef contests found</div>';
+                return;
+            }
+
+            if (!selectedCCContestTitle && filtered.length > 0) {
+                selectedCCContestTitle = filtered[0].title;
+            }
+
+            filtered.forEach((c) => {
+                const itemCard = document.createElement('div');
+                itemCard.className = `contest-item-card ${c.title === selectedCCContestTitle ? 'selected' : ''}`;
+                itemCard.onclick = () => selectCCContestItem(c.title);
+                
+                itemCard.innerHTML = `
+                    <span class="contest-item-title">${c.title}</span>
+                    <span class="contest-item-date">${c.date}</span>
+                `;
+                cardsContainer.appendChild(itemCard);
+
+                const opt = document.createElement('option');
+                opt.value = c.title;
+                opt.textContent = `${c.title} (${c.date})`;
+                if (c.title === selectedCCContestTitle) {
+                    opt.selected = true;
+                }
+                hiddenSelect.appendChild(opt);
+            });
+        }
+
+        function selectCCContestItem(title) {
+            selectedCCContestTitle = title;
+            renderCCContestCards(fetchedCCContests);
+        }
+
+        function filterCCContestsUI() {
+            if (fetchedCCContests.length > 0) {
+                renderCCContestCards(fetchedCCContests);
             }
         }
 
@@ -422,6 +546,7 @@
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             loadLeetCodeContests();
+            loadCodeChefContests();
             loadNavNotifications();
         });
     </script>
