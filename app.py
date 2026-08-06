@@ -6,7 +6,7 @@ from flask import Flask, jsonify, render_template, request, send_file, send_from
 from parsers.csv_parser import parse_csv
 from parsers.excel_parser import parse_excel
 from services.codechef_service import get_cc_summary, get_latest_cc_contests
-from services.codeforces_service import get_cf_summary
+from services.codeforces_service import get_cf_summary, get_latest_cf_contests
 from services.contest_scheduler import contest_scheduler
 from services.contest_service import contest_service
 from services.leetcode_service import find_latest_lc_contest, get_lc_summary, get_latest_lc_contests
@@ -102,7 +102,7 @@ def _load_rows(uploaded_file):
     return None
 
 
-def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_time=None, selected_cc_title=None, selected_cc_date=None):
+def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_time=None, selected_cc_title=None, selected_cc_date=None, selected_cf_id=None, selected_cf_date=None):
     tables = {"codeforces": [], "codechef": [], "leetcode": []}
 
     latest_lc_title = selected_lc_title
@@ -121,7 +121,7 @@ def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_
         if "codeforces" in selected_platforms:
             handle = _clean_text(row.get("codeforces"))
             if handle:
-                tables["codeforces"].append(get_cf_summary(idx, name, regno, dept, handle))
+                tables["codeforces"].append(get_cf_summary(idx, name, regno, dept, handle, target_contest_id=selected_cf_id, target_contest_date=selected_cf_date))
 
         if "codechef" in selected_platforms:
             handle = _clean_text(row.get("codechef"))
@@ -212,6 +212,15 @@ def api_codechef_contests():
         return jsonify({"error": f"Failed to fetch CodeChef contests from API: {str(e)}", "contests": []}), 500
 
 
+@app.route("/api/codeforces/contests", methods=["GET"])
+def api_codeforces_contests():
+    try:
+        contests = get_latest_cf_contests(6)
+        return jsonify({"contests": contests})
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch Codeforces contests from API: {str(e)}", "contests": []}), 500
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "GET":
@@ -253,6 +262,20 @@ def index():
             except Exception:
                 pass
 
+    selected_cf_id = None
+    selected_cf_date = None
+    if "codeforces" in selected_platforms:
+        cf_contest_val = _clean_text(request.form.get("codeforces_contest"))
+        if cf_contest_val:
+            try:
+                cf_contests = get_latest_cf_contests(10)
+                matched_cf = next((c for c in cf_contests if c["title"] == cf_contest_val or str(c.get("id")) == cf_contest_val), None)
+                if matched_cf:
+                    selected_cf_id = matched_cf.get("id")
+                    selected_cf_date = matched_cf.get("date")
+            except Exception:
+                pass
+
     uploaded_file = request.files.get("csvfile")
     rows = []
 
@@ -275,7 +298,7 @@ def index():
             error="Provide at least one platform ID for the selected platforms.",
         ), 400
 
-    tables = _analyze_rows(rows, selected_platforms, selected_lc_title, selected_lc_time, selected_cc_title, selected_cc_date)
+    tables = _analyze_rows(rows, selected_platforms, selected_lc_title, selected_lc_time, selected_cc_title, selected_cc_date, selected_cf_id, selected_cf_date)
 
     global cache_tables
     cache_tables = tables

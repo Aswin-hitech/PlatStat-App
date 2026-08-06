@@ -84,6 +84,28 @@
                         </div>
                     </div>
 
+                    <!-- Custom Codeforces Contest Selector Section -->
+                    <div id="codeforces_contest_section" class="contest-picker-section" style="margin-bottom: 16px;">
+                        <label for="codeforces_contest_search">
+                            <span>Select Codeforces Contest</span>
+                            <span style="color:var(--text-accent); font-size:12px;">TARGET CONTEST</span>
+                        </label>
+                        
+                        <div class="search-input-wrapper">
+                            <input type="text" id="codeforces_contest_search" placeholder="Search Codeforces contest..." oninput="filterCFContestsUI()">
+                        </div>
+
+                        <!-- Custom Codeforces Contest Card List -->
+                        <div id="cf_contest_list_cards" class="contest-list-cards">
+                            <div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">Loading Codeforces contests...</div>
+                        </div>
+
+                        <!-- Hidden Select Fallback for Backend Form Compatibility -->
+                        <select name="codeforces_contest" id="codeforces_contest_select"></select>
+
+                        <div id="cf_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
+                    </div>
+
                     <!-- Custom LeetCode Contest Selector Section -->
                     <div id="leetcode_contest_section" class="contest-picker-section">
                         <label for="leetcode_contest_search">
@@ -211,6 +233,8 @@
         let selectedContestTitle = '';
         let fetchedCCContests = [];
         let selectedCCContestTitle = '';
+        let fetchedCFContests = [];
+        let selectedCFContestTitle = '';
 
         // Platform Card Toggle Logic
         function togglePlatform(platform) {
@@ -229,6 +253,9 @@
             }
             if (platform === 'codechef') {
                 loadCodeChefContests();
+            }
+            if (platform === 'codeforces') {
+                loadCodeforcesContests();
             }
         }
 
@@ -429,6 +456,103 @@
             }
         }
 
+        // Fetch & Render Custom Codeforces Contests
+        function loadCodeforcesContests() {
+            const cfSection = document.getElementById('codeforces_contest_section');
+            const cfCheckbox = document.getElementById('platform_codeforces');
+            const cardsContainer = document.getElementById('cf_contest_list_cards');
+            const hiddenSelect = document.getElementById('codeforces_contest_select');
+            const errDiv = document.getElementById('cf_contest_error');
+
+            if (!cfCheckbox || !cfCheckbox.checked) {
+                if (cfSection) cfSection.style.display = 'none';
+                return;
+            }
+
+            cfSection.style.display = 'block';
+
+            if (fetchedCFContests.length > 0) {
+                renderCFContestCards(fetchedCFContests);
+                return;
+            }
+
+            cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">Loading Codeforces contests...</div>';
+            errDiv.style.display = 'none';
+
+            fetch('/api/codeforces/contests')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error || !data.contests || data.contests.length === 0) {
+                        const errMsg = data.error || 'Failed to load Codeforces contests from API.';
+                        cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--error-text); font-size:13px;">Unable to fetch Codeforces contests</div>';
+                        errDiv.textContent = errMsg;
+                        errDiv.style.display = 'block';
+                    } else {
+                        fetchedCFContests = data.contests;
+                        renderCFContestCards(fetchedCFContests);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching CF contests:', err);
+                    cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--error-text); font-size:13px;">Unable to fetch Codeforces contests</div>';
+                    errDiv.textContent = 'Failed to load Codeforces contests. Please try again.';
+                    errDiv.style.display = 'block';
+                });
+        }
+
+        function renderCFContestCards(contests) {
+            const cardsContainer = document.getElementById('cf_contest_list_cards');
+            const hiddenSelect = document.getElementById('codeforces_contest_select');
+            const searchVal = (document.getElementById('codeforces_contest_search').value || '').toLowerCase();
+            
+            cardsContainer.innerHTML = '';
+            hiddenSelect.innerHTML = '';
+
+            const filtered = contests.filter(c => 
+                c.title.toLowerCase().includes(searchVal) || String(c.id).includes(searchVal) || c.date.includes(searchVal)
+            );
+
+            if (filtered.length === 0) {
+                cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">No matching Codeforces contests found</div>';
+                return;
+            }
+
+            if (!selectedCFContestTitle && filtered.length > 0) {
+                selectedCFContestTitle = filtered[0].title;
+            }
+
+            filtered.forEach((c) => {
+                const itemCard = document.createElement('div');
+                itemCard.className = `contest-item-card ${c.title === selectedCFContestTitle ? 'selected' : ''}`;
+                itemCard.onclick = () => selectCFContestItem(c.title);
+                
+                itemCard.innerHTML = `
+                    <span class="contest-item-title">${c.title}</span>
+                    <span class="contest-item-date">${c.date}</span>
+                `;
+                cardsContainer.appendChild(itemCard);
+
+                const opt = document.createElement('option');
+                opt.value = c.title;
+                opt.textContent = `${c.title} (${c.date})`;
+                if (c.title === selectedCFContestTitle) {
+                    opt.selected = true;
+                }
+                hiddenSelect.appendChild(opt);
+            });
+        }
+
+        function selectCFContestItem(title) {
+            selectedCFContestTitle = title;
+            renderCFContestCards(fetchedCFContests);
+        }
+
+        function filterCFContestsUI() {
+            if (fetchedCFContests.length > 0) {
+                renderCFContestCards(fetchedCFContests);
+            }
+        }
+
         // Segmented Control Tab Switcher
         function switchTab(mode) {
             const singleBtn = document.getElementById('tab_btn_single');
@@ -545,6 +669,7 @@
 
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
+            loadCodeforcesContests();
             loadLeetCodeContests();
             loadCodeChefContests();
             loadNavNotifications();
