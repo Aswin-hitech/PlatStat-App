@@ -146,44 +146,122 @@ def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_
     return tables
 
 
-def _combined_export_frame(tables):
+def _clean_row_dict(row):
+    """Clean row dictionary to replace None/NaN with 'AB' or empty string and ensure numeric values don't turn into floats."""
+    cleaned = {}
+    for k, v in row.items():
+        if v is None or v == "" or pd.isna(v):
+            cleaned[k] = "AB"
+        elif isinstance(v, float) and v.is_integer():
+            cleaned[k] = int(v)
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
+def _combined_export_frame(tables, requested_platform=None):
+    """Build a combined pandas DataFrame for CSV export."""
     frames = []
-    for platform, rows in tables.items():
+
+    target_keys = [requested_platform] if (requested_platform and requested_platform in tables) else ["codeforces", "codechef", "leetcode"]
+
+    for platform in target_keys:
+        rows = tables.get(platform, [])
         if not rows:
             continue
-        frame = pd.DataFrame(rows).copy()
-        frame.insert(0, "Platform", platform.capitalize())
+        cleaned_rows = [_clean_row_dict(r) for r in rows]
+        frame = pd.DataFrame(cleaned_rows)
+        if len(target_keys) > 1:
+            frame.insert(0, "Platform", platform.capitalize())
         frames.append(frame)
+
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True, sort=False)
+
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    combined = combined.fillna("AB")
+    return combined
 
 
-def _tables_to_excel_stream(tables):
+def _auto_fit_columns(worksheet):
+    """Auto-adjust worksheet column widths and apply header styling."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    data_font = Font(name="Calibri", size=11, color="0F172A")
+    thin_border = Border(
+        left=Side(style="thin", color="E2E8F0"),
+        right=Side(style="thin", color="E2E8F0"),
+        top=Side(style="thin", color="E2E8F0"),
+        bottom=Side(style="thin", color="E2E8F0")
+    )
+
+    for row in worksheet.iter_rows():
+        for cell in row:
+            if cell.row == 1 and cell.value:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cell.font = data_font
+                cell.border = thin_border
+                if isinstance(cell.value, (int, float)):
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                else:
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    for col in worksheet.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            val_str = str(cell.value or "")
+            if len(val_str) > max_len:
+                max_len = len(val_str)
+        worksheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+
+def _tables_to_excel_stream(tables, requested_platform=None):
+    """Build an Excel file stream with dedicated platform worksheets and styling."""
     output = BytesIO()
-    sections = [
-        ("Codeforces", tables.get("codeforces", [])),
-        ("CodeChef", tables.get("codechef", [])),
-        ("LeetCode", tables.get("leetcode", [])),
-    ]
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         workbook = writer.book
-        worksheet = workbook.create_sheet("Results")
-        writer.sheets["Results"] = worksheet
 
-        row_cursor = 0
-        for section_name, rows in sections:
-            worksheet.cell(row=row_cursor + 1, column=1, value=f"{section_name}:")
-            row_cursor += 1
+        active_sections = []
+        if requested_platform and tables.get(requested_platform):
+            active_sections.append((requested_platform.capitalize(), tables[requested_platform]))
+        else:
+            for p in ["codeforces", "codechef", "leetcode"]:
+                if tables.get(p):
+                    active_sections.append((p.capitalize(), tables[p]))
 
-            if rows:
-                frame = pd.DataFrame(rows)
-                frame.to_excel(writer, sheet_name="Results", startrow=row_cursor, index=False)
-                row_cursor += len(frame) + 3
-            else:
-                worksheet.cell(row=row_cursor + 1, column=1, value="No data found")
-                row_cursor += 3
+        if not active_sections:
+            ws = workbook.create_sheet(title="Results")
+            ws.cell(row=1, column=1, value="No data found")
+        elif len(active_sections) == 1:
+            name, rows = active_sections[0]
+            cleaned_rows = [_clean_row_dict(r) for r in rows]
+            df = pd.DataFrame(cleaned_rows)
+            df.to_excel(writer, sheet_name=name, index=False)
+            ws = writer.sheets[name]
+            _auto_fit_columns(ws)
+        else:
+            combined_frame = _combined_export_frame(tables)
+            if not combined_frame.empty:
+                combined_frame.to_excel(writer, sheet_name="Combined Results", index=False)
+                ws_comb = writer.sheets["Combined Results"]
+                _auto_fit_columns(ws_comb)
+
+            for name, rows in active_sections:
+                cleaned_rows = [_clean_row_dict(r) for r in rows]
+                df = pd.DataFrame(cleaned_rows)
+                df.to_excel(writer, sheet_name=name, index=False)
+                ws = writer.sheets[name]
+                _auto_fit_columns(ws)
+
+        if "Sheet" in workbook.sheetnames and len(workbook.sheetnames) > 1:
+            workbook.remove(workbook["Sheet"])
 
     output.seek(0)
     return output
@@ -336,18 +414,18 @@ def download():
     filename = get_export_filename(platform_name=platform_name, extension=export_format)
 
     if export_format == "csv":
-        frame = _combined_export_frame(export_tables)
+        frame = _combined_export_frame(export_tables, requested_platform=requested_platform if requested_platform in cache_tables else None)
         output = BytesIO()
-        output.write(frame.to_csv(index=False).encode("utf-8"))
+        output.write(frame.to_csv(index=False).encode("utf-8-sig"))
         output.seek(0)
         return send_file(
             output,
             as_attachment=True,
             download_name=filename,
-            mimetype="text/csv",
+            mimetype="text/csv; charset=utf-8",
         )
 
-    excel_file = _tables_to_excel_stream(export_tables)
+    excel_file = _tables_to_excel_stream(export_tables, requested_platform=requested_platform if requested_platform in cache_tables else None)
     return send_file(
         excel_file,
         as_attachment=True,

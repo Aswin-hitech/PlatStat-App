@@ -160,6 +160,9 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
           userContestRankingHistory(username:$u){
             contest{title titleSlug startTime}
             problemsSolved
+            rating
+            ranking
+            attended
           }
         }
         """,
@@ -185,6 +188,7 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
 
         cs = data.get("userContestRanking") or {}
         rating = round(cs["rating"]) if cs.get("rating") else "AB"
+        global_rank = mu["profile"].get("ranking", "AB") if mu.get("profile") else "AB"
         top = cs.get("topPercentage","AB")
 
         hist = data.get("userContestRankingHistory") or []
@@ -202,12 +206,28 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
                 break
 
         # If participated
-        if participated:
+        if participated and participated.get("attended"):
             total = participated["problemsSolved"]
-            date = to_date(latest_contest_time)
+            date = to_date(latest_contest_time or participated["contest"].get("startTime"))
             contest_no = extract_no(latest_contest_title)
             lc_easy,lc_med,lc_hard = split_by_contest_total(total)
 
+            # Historical rating & contest rank as of this contest date
+            if participated.get("rating"):
+                rating = round(participated["rating"])
+            if participated.get("ranking"):
+                global_rank = participated["ranking"]
+
+        elif participated:
+            total = participated.get("problemsSolved", 0)
+            date = to_date(latest_contest_time or participated["contest"].get("startTime"))
+            contest_no = extract_no(latest_contest_title)
+            lc_easy,lc_med,lc_hard = split_by_contest_total(total) if total > 0 else ("AB","AB","AB")
+
+            if participated.get("rating"):
+                rating = round(participated["rating"])
+            if participated.get("ranking") and participated.get("ranking") > 0:
+                global_rank = participated["ranking"]
         else:
             total = "AB"
             date = to_date(latest_contest_time) if latest_contest_time else "AB"
@@ -226,7 +246,7 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
             "Total(No.of Problem Solved)": total,
             "Contest count": contest_no,
             "Contest Rating": rating,
-            "Global Rank": mu["profile"].get("ranking","AB"),
+            "Global Rank": global_rank,
             "Top": top
         }
 

@@ -103,6 +103,28 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
         solved_val = len(solved) if solved else "AB"
         target_val = len(target_solved) if target_contest_id else "AB"
 
+        current_rating = user.get("rating", "AB")
+        global_rank = user.get("rank", "AB")
+
+        # Historical rating & contest rank extraction
+        if target_contest_id:
+            try:
+                r_rat = requests.get(
+                    f"https://codeforces.com/api/user.rating?handle={handle}",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=10
+                ).json()
+                if r_rat.get("status") == "OK":
+                    for item in r_rat.get("result", []):
+                        if str(item.get("contestId")) == str(target_contest_id):
+                            if item.get("newRating") is not None:
+                                current_rating = item["newRating"]
+                            if item.get("rank") is not None:
+                                global_rank = item["rank"]
+                            break
+            except Exception as rat_err:
+                print("CF rating history fetch error:", rat_err)
+
         return {
             "S. No": sn,
             "Name of the Student": name,
@@ -111,8 +133,8 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
             "Date": output_date,
             "Problem Solved": solved_val,
             "Target Contest Solved": target_val,
-            "Global Rank": user.get("rank", "AB"),
-            "Current Rating": user.get("rating", "AB"),
+            "Global Rank": global_rank,
+            "Current Rating": current_rating,
             "Max. Rating": user.get("maxRating", "AB"),
             "Max. Ranking": user.get("maxRank", "AB")
         }

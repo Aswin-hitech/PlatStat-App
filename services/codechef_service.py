@@ -250,7 +250,7 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
                 if total_solved_count > 0:
                     row["Problems Solved"] = str(total_solved_count)
 
-        # Target Contest Matching
+        # Target Contest Matching & Historical Rating Lookup
         if target_contest_title:
             target_norm = target_contest_title.lower().strip()
             target_num_m = re.search(r"(starters\s*\d+|monday munch[^\(]*)", target_norm, re.I)
@@ -270,6 +270,24 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
                     else:
                         row["Target Contest Solved"] = 0
                     break
+
+            # Parse historical rating and rank from all_rating script array
+            import json
+            ar_m = re.search(r"all_rating\s*=\s*(\[.*?\]);", html, re.DOTALL)
+            if ar_m:
+                try:
+                    ar_data = json.loads(ar_m.group(1))
+                    for item in ar_data:
+                        c_name = (item.get("name") or "").lower()
+                        c_code = (item.get("code") or "").lower()
+                        if key_search in c_name or key_search in c_code or target_norm in c_name:
+                            if item.get("rating"):
+                                row["Current Rating"] = str(item["rating"])
+                            if item.get("rank"):
+                                row["Global Rank"] = str(item["rank"])
+                            break
+                except Exception as ar_err:
+                    print("CodeChef rating history parse error:", ar_err)
 
         return row
 
