@@ -62,12 +62,13 @@ def get_latest_lc_contests(limit=6):
         raise e
 
 
-def ab_row(sn, name, regno, dept):
+def ab_row(sn, name, regno, dept, contest_title=None):
     return {
         "S. No": sn,
         "Name of the Student": name,
         "Register No": regno,
         "Dept": dept,
+        "Target Contest": contest_title or "N/A",
         "Date": "AB",
         "Leet Code Easy": "AB",
         "Leet Code Medium": "AB",
@@ -239,6 +240,7 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
             "Name of the Student": name,
             "Register No": regno,
             "Dept": dept,
+            "Target Contest": latest_contest_title or "N/A",
             "Date": date,
             "Leet Code Easy": lc_easy,
             "Leet Code Medium": lc_med,
@@ -252,4 +254,4 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
 
     except Exception as e:
         print("LC error:",e)
-        return ab_row(sn,name,regno,dept)
+        return ab_row(sn,name,regno,dept,latest_contest_title)

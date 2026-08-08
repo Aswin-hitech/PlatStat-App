@@ -67,6 +67,20 @@
             </div>
         </div>
 
+        <!-- Bulk Selection Bar -->
+        <div id="bulk_selection_bar" class="bulk-selection-bar" style="display:none; background: rgba(43, 140, 255, 0.08); border: 1px solid rgba(43, 140, 255, 0.2); border-radius: var(--radius-sm); padding: 12px 20px; margin-bottom: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-weight:700; font-family:'Outfit', sans-serif; font-size:14px; color:var(--text-primary);">Bulk Actions:</span>
+                <span id="bulk_count_badge" class="badge">0 Selected</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <button type="button" class="btn-toolbar-toggle" onclick="selectAllVisibleContests()">☑️ Select All</button>
+                <button type="button" class="btn-toolbar-toggle" onclick="bulkFavoriteSelected()">⭐ Favorite Selected</button>
+                <button type="button" class="btn-toolbar-toggle" onclick="bulkReminderSelected()">🔔 Set Reminders</button>
+                <button type="button" class="btn-text-action" onclick="deselectAllContests()" style="color:var(--error-text);">Clear</button>
+            </div>
+        </div>
+
         <!-- Contest Cards Grid -->
         <div id="contest_cards_grid" class="contest-cards-grid">
             <div class="loading-state">Loading upcoming contests...</div>
@@ -104,22 +118,23 @@
     </div>
 
     <script>
-        let currentPlatform = 'all';
-        let favoritesOnly = false;
         let contestsData = [];
+        let selectedPlatform = 'all';
+        let favoritesOnly = false;
         let searchTimeout = null;
+        let selectedContestIds = new Set();
 
         const PLATFORM_ICONS = {
-            'leetcode': '⚡',
-            'codeforces': '📊',
-            'codechef': '🍳',
-            'atcoder': '🎯'
+            leetcode: '⚡',
+            codeforces: '📈',
+            codechef: '🍳',
+            atcoder: '🎯'
         };
 
         function setPlatformFilter(plat, btnEl) {
-            currentPlatform = plat;
+            selectedPlatform = plat;
             document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
-            btnEl.classList.add('active');
+            if (btnEl) btnEl.classList.add('active');
             loadContests();
         }
 
@@ -135,8 +150,10 @@
         }
 
         function debounceFetchContests() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(loadContests, 300);
+            if (searchTimeout) clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                loadContests();
+            }, 350);
         }
 
         function loadContests() {
@@ -146,12 +163,14 @@
 
             grid.innerHTML = '<div class="loading-state">Loading upcoming contests...</div>';
 
-            const queryParams = new URLSearchParams({
-                platform: currentPlatform,
-                search: search,
-                favorites: favoritesOnly,
-                sort: sort
-            });
+            const params = new URLSearchParams();
+            if (selectedPlatform !== 'all') params.append('platform', selectedPlatform);
+            if (favoritesOnly) params.append('favoritesOnly', 'true');
+            if (search) params.append('search', search);
+            if (sort) params.append('sort', sort);
+            params.append('pageSize', '50');
+
+            const queryParams = params.toString();
 
             fetch(`/api/contests?${queryParams}`)
                 .then(res => res.json())
@@ -171,17 +190,22 @@
 
             if (!contests || contests.length === 0) {
                 grid.innerHTML = '<div class="loading-state">No upcoming contests found.</div>';
+                updateBulkBar();
                 return;
             }
 
             contests.forEach(c => {
                 const icon = PLATFORM_ICONS[c.platform] || '🏆';
                 const card = document.createElement('div');
-                card.className = `contest-card plat-${c.platform}`;
+                const isSelected = selectedContestIds.has(c.contestId);
+                card.className = `contest-card plat-${c.platform} ${isSelected ? 'selected' : ''}`;
 
                 card.innerHTML = `
                     <div class="contest-card-header">
-                        <span class="platform-badge badge-${c.platform}">${icon} ${c.platform.toUpperCase()}</span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleContestSelection('${c.contestId}', event)" style="width:16px; height:16px; accent-color:var(--accent-blue); cursor:pointer;">
+                            <span class="platform-badge badge-${c.platform}">${icon} ${c.platform.toUpperCase()}</span>
+                        </div>
                         <div class="contest-card-actions">
                             <button type="button" class="btn-icon-action ${c.isFavorite ? 'active-fav' : ''}" title="Favorite" onclick="toggleFavorite('${c.contestId}', '${c.platform}', ${!c.isFavorite})">
                                 ${c.isFavorite ? '⭐' : '☆'}
@@ -197,7 +221,6 @@
                         <div><span>⏱️ Duration:</span> <strong>${c.durationFormatted}</strong></div>
                     </div>
                     
-                    <!-- Real-Time Live Countdown -->
                     <div class="countdown-container">
                         <div class="countdown-label">STARTS IN</div>
                         <div class="countdown-timer" id="timer_${c.contestId}" data-secs="${c.secondsRemaining}">
@@ -210,6 +233,66 @@
 
                 grid.appendChild(card);
             });
+
+            updateBulkBar();
+        }
+
+        function toggleContestSelection(cid, e) {
+            if (e) e.stopPropagation();
+            if (selectedContestIds.has(cid)) {
+                selectedContestIds.delete(cid);
+            } else {
+                selectedContestIds.add(cid);
+            }
+            renderContestCards(contestsData);
+        }
+
+        function selectAllVisibleContests() {
+            contestsData.forEach(c => selectedContestIds.add(c.contestId));
+            renderContestCards(contestsData);
+        }
+
+        function deselectAllContests() {
+            selectedContestIds.clear();
+            renderContestCards(contestsData);
+        }
+
+        function updateBulkBar() {
+            const bar = document.getElementById('bulk_selection_bar');
+            const badge = document.getElementById('bulk_count_badge');
+            if (!bar || !badge) return;
+
+            if (selectedContestIds.size > 0) {
+                bar.style.display = 'flex';
+                badge.textContent = `${selectedContestIds.size} Selected`;
+            } else {
+                bar.style.display = 'none';
+            }
+        }
+
+        function bulkFavoriteSelected() {
+            if (selectedContestIds.size === 0) return;
+            const promises = Array.from(selectedContestIds).map(cid => {
+                const c = contestsData.find(item => item.contestId === cid);
+                const isFav = c ? c.isFavorite : false;
+                return fetch(`/api/contests/${cid}/favorite`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ isFavorite: !isFav, platform: c ? c.platform : 'all' })
+                });
+            });
+            Promise.all(promises).then(() => {
+                loadContests();
+            });
+        }
+
+        function bulkReminderSelected() {
+            if (selectedContestIds.size === 0) return;
+            const firstCid = Array.from(selectedContestIds)[0];
+            const c = contestsData.find(item => item.contestId === firstCid);
+            if (c) {
+                openReminderModal(c.contestId, c.platform, encodeURIComponent(`${selectedContestIds.size} Selected Contests`), c.subscribedIntervals || []);
+            }
         }
 
         function formatCountdown(secs) {
@@ -298,7 +381,57 @@
             grid.innerHTML = '<div class="loading-state">Syncing contests from APIs...</div>';
             fetch('/api/contests/sync', { method: 'POST' })
             .then(res => res.json())
-            .then(() => loadContests());
+            .then(data => {
+                if (data.toast) {
+                    showToastAlert(data.toast.title, data.toast.message, data.toast.icon);
+                }
+                loadContests();
+                loadNotifications();
+            });
+        }
+
+        function showToastAlert(title, message, icon = '🔔', duration = 6000) {
+            let container = document.getElementById('toast_container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast_container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = 'toast-alert';
+            toast.innerHTML = `
+                <span class="toast-icon">${icon}</span>
+                <div class="toast-body">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+                <button type="button" class="toast-close" onclick="closeToastAlert(this)">✖</button>
+            `;
+
+            container.appendChild(toast);
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification(title, { body: message, icon: '/static/favicon.ico' });
+                } catch (e) {}
+            }
+
+            setTimeout(() => {
+                closeToastAlert(toast.querySelector('.toast-close'));
+            }, duration);
+        }
+
+        function closeToastAlert(btn) {
+            if (!btn) return;
+            const toast = btn.closest('.toast-alert');
+            if (toast) {
+                toast.classList.add('hide');
+                setTimeout(() => {
+                    if (toast.parentElement) toast.parentElement.removeChild(toast);
+                }, 400);
+            }
         }
 
         function loadNotifications() {

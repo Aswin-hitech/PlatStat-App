@@ -86,10 +86,17 @@
 
                     <!-- Custom Codeforces Contest Selector Section -->
                     <div id="codeforces_contest_section" class="contest-picker-section" style="margin-bottom: 16px;">
-                        <label for="codeforces_contest_search">
-                            <span>Select Codeforces Contest</span>
-                            <span style="color:var(--text-accent); font-size:12px;">TARGET CONTEST</span>
-                        </label>
+                        <div class="contest-picker-header">
+                            <label for="codeforces_contest_search">
+                                <span>Select Codeforces Contests</span>
+                                <span class="badge" id="cf_selected_badge">0 Selected</span>
+                            </label>
+                            <div class="contest-select-controls">
+                                <button type="button" class="btn-text-action" onclick="selectAllCFContests()">Select All</button>
+                                <span class="divider">•</span>
+                                <button type="button" class="btn-text-action" onclick="clearCFContests()">Clear</button>
+                            </div>
+                        </div>
                         
                         <div class="search-input-wrapper">
                             <input type="text" id="codeforces_contest_search" placeholder="Search Codeforces contest..." oninput="filterCFContestsUI()">
@@ -101,17 +108,24 @@
                         </div>
 
                         <!-- Hidden Select Fallback for Backend Form Compatibility -->
-                        <select name="codeforces_contest" id="codeforces_contest_select"></select>
+                        <select name="codeforces_contest" id="codeforces_contest_select" multiple style="display:none;"></select>
 
                         <div id="cf_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
                     </div>
 
                     <!-- Custom LeetCode Contest Selector Section -->
                     <div id="leetcode_contest_section" class="contest-picker-section">
-                        <label for="leetcode_contest_search">
-                            <span>Select LeetCode Contest</span>
-                            <span style="color:var(--text-accent); font-size:12px;">REQUIRED</span>
-                        </label>
+                        <div class="contest-picker-header">
+                            <label for="leetcode_contest_search">
+                                <span>Select LeetCode Contests</span>
+                                <span class="badge" id="lc_selected_badge">0 Selected</span>
+                            </label>
+                            <div class="contest-select-controls">
+                                <button type="button" class="btn-text-action" onclick="selectAllLCContests()">Select All</button>
+                                <span class="divider">•</span>
+                                <button type="button" class="btn-text-action" onclick="clearLCContests()">Clear</button>
+                            </div>
+                        </div>
                         
                         <div class="search-input-wrapper">
                             <input type="text" id="leetcode_contest_search" placeholder="Search contest name or date..." oninput="filterContestsUI()">
@@ -123,17 +137,24 @@
                         </div>
 
                         <!-- Hidden Select Fallback for Backend Form Compatibility -->
-                        <select name="leetcode_contest" id="leetcode_contest_select"></select>
+                        <select name="leetcode_contest" id="leetcode_contest_select" multiple style="display:none;"></select>
 
                         <div id="lc_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
                     </div>
 
                     <!-- Custom CodeChef Contest Selector Section -->
                     <div id="codechef_contest_section" class="contest-picker-section" style="margin-top: 16px;">
-                        <label for="codechef_contest_search">
-                            <span>Select CodeChef Contest</span>
-                            <span style="color:var(--text-accent); font-size:12px;">TARGET CONTEST</span>
-                        </label>
+                        <div class="contest-picker-header">
+                            <label for="codechef_contest_search">
+                                <span>Select CodeChef Contests</span>
+                                <span class="badge" id="cc_selected_badge">0 Selected</span>
+                            </label>
+                            <div class="contest-select-controls">
+                                <button type="button" class="btn-text-action" onclick="selectAllCCContests()">Select All</button>
+                                <span class="divider">•</span>
+                                <button type="button" class="btn-text-action" onclick="clearCCContests()">Clear</button>
+                            </div>
+                        </div>
                         
                         <div class="search-input-wrapper">
                             <input type="text" id="codechef_contest_search" placeholder="Search CodeChef contest..." oninput="filterCCContestsUI()">
@@ -145,7 +166,7 @@
                         </div>
 
                         <!-- Hidden Select Fallback for Backend Form Compatibility -->
-                        <select name="codechef_contest" id="codechef_contest_select"></select>
+                        <select name="codechef_contest" id="codechef_contest_select" multiple style="display:none;"></select>
 
                         <div id="cc_contest_error" class="error-alert" style="display: none; margin-top: 14px; margin-bottom: 0;"></div>
                     </div>
@@ -230,11 +251,11 @@
 
     <script>
         let fetchedContests = [];
-        let selectedContestTitle = '';
+        let selectedLCContests = new Set();
         let fetchedCCContests = [];
-        let selectedCCContestTitle = '';
+        let selectedCCContests = new Set();
         let fetchedCFContests = [];
-        let selectedCFContestTitle = '';
+        let selectedCFContests = new Set();
 
         // Platform Card Toggle Logic
         function togglePlatform(platform) {
@@ -264,7 +285,6 @@
             const lcSection = document.getElementById('leetcode_contest_section');
             const lcCheckbox = document.getElementById('platform_leetcode');
             const cardsContainer = document.getElementById('contest_list_cards');
-            const hiddenSelect = document.getElementById('leetcode_contest_select');
             const errDiv = document.getElementById('lc_contest_error');
 
             if (!lcCheckbox.checked) {
@@ -292,6 +312,9 @@
                         errDiv.style.display = 'block';
                     } else {
                         fetchedContests = data.contests;
+                        if (selectedLCContests.size === 0 && fetchedContests.length > 0) {
+                            selectedLCContests.add(fetchedContests[0].title);
+                        }
                         renderContestCards(fetchedContests);
                     }
                 })
@@ -307,10 +330,12 @@
         function renderContestCards(contests) {
             const cardsContainer = document.getElementById('contest_list_cards');
             const hiddenSelect = document.getElementById('leetcode_contest_select');
+            const badge = document.getElementById('lc_selected_badge');
             const searchVal = (document.getElementById('leetcode_contest_search').value || '').toLowerCase();
             
             cardsContainer.innerHTML = '';
             hiddenSelect.innerHTML = '';
+            hiddenSelect.multiple = true;
 
             const filtered = contests.filter(c => 
                 c.title.toLowerCase().includes(searchVal) || c.date.includes(searchVal)
@@ -318,38 +343,55 @@
 
             if (filtered.length === 0) {
                 cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">No matching contests found</div>';
-                return;
+            } else {
+                filtered.forEach((c) => {
+                    const isSelected = selectedLCContests.has(c.title);
+                    const itemCard = document.createElement('div');
+                    itemCard.className = `contest-item-card ${isSelected ? 'selected' : ''}`;
+                    itemCard.onclick = () => selectContestItem(c.title);
+                    
+                    itemCard.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" ${isSelected ? 'checked' : ''} style="accent-color:var(--accent-blue); pointer-events:none;">
+                            <span class="contest-item-title">${c.title}</span>
+                        </div>
+                        <span class="contest-item-date">${c.date}</span>
+                    `;
+                    cardsContainer.appendChild(itemCard);
+                });
             }
 
-            if (!selectedContestTitle && filtered.length > 0) {
-                selectedContestTitle = filtered[0].title;
-            }
-
-            filtered.forEach((c, idx) => {
-                // Build Card element
-                const itemCard = document.createElement('div');
-                itemCard.className = `contest-item-card ${c.title === selectedContestTitle ? 'selected' : ''}`;
-                itemCard.onclick = () => selectContestItem(c.title);
-                
-                itemCard.innerHTML = `
-                    <span class="contest-item-title">${c.title}</span>
-                    <span class="contest-item-date">${c.date}</span>
-                `;
-                cardsContainer.appendChild(itemCard);
-
-                // Build hidden select option
+            contests.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.title;
                 opt.textContent = `${c.title} (${c.date})`;
-                if (c.title === selectedContestTitle) {
+                if (selectedLCContests.has(c.title)) {
                     opt.selected = true;
                 }
                 hiddenSelect.appendChild(opt);
             });
+
+            if (badge) {
+                badge.textContent = `${selectedLCContests.size} Selected`;
+            }
         }
 
         function selectContestItem(title) {
-            selectedContestTitle = title;
+            if (selectedLCContests.has(title)) {
+                selectedLCContests.delete(title);
+            } else {
+                selectedLCContests.add(title);
+            }
+            renderContestCards(fetchedContests);
+        }
+
+        function selectAllLCContests() {
+            fetchedContests.forEach(c => selectedLCContests.add(c.title));
+            renderContestCards(fetchedContests);
+        }
+
+        function clearLCContests() {
+            selectedLCContests.clear();
             renderContestCards(fetchedContests);
         }
 
@@ -364,7 +406,6 @@
             const ccSection = document.getElementById('codechef_contest_section');
             const ccCheckbox = document.getElementById('platform_codechef');
             const cardsContainer = document.getElementById('cc_contest_list_cards');
-            const hiddenSelect = document.getElementById('codechef_contest_select');
             const errDiv = document.getElementById('cc_contest_error');
 
             if (!ccCheckbox || !ccCheckbox.checked) {
@@ -392,6 +433,9 @@
                         errDiv.style.display = 'block';
                     } else {
                         fetchedCCContests = data.contests;
+                        if (selectedCCContests.size === 0 && fetchedCCContests.length > 0) {
+                            selectedCCContests.add(fetchedCCContests[0].title);
+                        }
                         renderCCContestCards(fetchedCCContests);
                     }
                 })
@@ -406,10 +450,12 @@
         function renderCCContestCards(contests) {
             const cardsContainer = document.getElementById('cc_contest_list_cards');
             const hiddenSelect = document.getElementById('codechef_contest_select');
+            const badge = document.getElementById('cc_selected_badge');
             const searchVal = (document.getElementById('codechef_contest_search').value || '').toLowerCase();
             
             cardsContainer.innerHTML = '';
             hiddenSelect.innerHTML = '';
+            hiddenSelect.multiple = true;
 
             const filtered = contests.filter(c => 
                 c.title.toLowerCase().includes(searchVal) || c.code.toLowerCase().includes(searchVal) || c.date.includes(searchVal)
@@ -417,36 +463,55 @@
 
             if (filtered.length === 0) {
                 cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">No matching CodeChef contests found</div>';
-                return;
+            } else {
+                filtered.forEach((c) => {
+                    const isSelected = selectedCCContests.has(c.title);
+                    const itemCard = document.createElement('div');
+                    itemCard.className = `contest-item-card ${isSelected ? 'selected' : ''}`;
+                    itemCard.onclick = () => selectCCContestItem(c.title);
+                    
+                    itemCard.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" ${isSelected ? 'checked' : ''} style="accent-color:var(--accent-blue); pointer-events:none;">
+                            <span class="contest-item-title">${c.title}</span>
+                        </div>
+                        <span class="contest-item-date">${c.date}</span>
+                    `;
+                    cardsContainer.appendChild(itemCard);
+                });
             }
 
-            if (!selectedCCContestTitle && filtered.length > 0) {
-                selectedCCContestTitle = filtered[0].title;
-            }
-
-            filtered.forEach((c) => {
-                const itemCard = document.createElement('div');
-                itemCard.className = `contest-item-card ${c.title === selectedCCContestTitle ? 'selected' : ''}`;
-                itemCard.onclick = () => selectCCContestItem(c.title);
-                
-                itemCard.innerHTML = `
-                    <span class="contest-item-title">${c.title}</span>
-                    <span class="contest-item-date">${c.date}</span>
-                `;
-                cardsContainer.appendChild(itemCard);
-
+            contests.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.title;
                 opt.textContent = `${c.title} (${c.date})`;
-                if (c.title === selectedCCContestTitle) {
+                if (selectedCCContests.has(c.title)) {
                     opt.selected = true;
                 }
                 hiddenSelect.appendChild(opt);
             });
+
+            if (badge) {
+                badge.textContent = `${selectedCCContests.size} Selected`;
+            }
         }
 
         function selectCCContestItem(title) {
-            selectedCCContestTitle = title;
+            if (selectedCCContests.has(title)) {
+                selectedCCContests.delete(title);
+            } else {
+                selectedCCContests.add(title);
+            }
+            renderCCContestCards(fetchedCCContests);
+        }
+
+        function selectAllCCContests() {
+            fetchedCCContests.forEach(c => selectedCCContests.add(c.title));
+            renderCCContestCards(fetchedCCContests);
+        }
+
+        function clearCCContests() {
+            selectedCCContests.clear();
             renderCCContestCards(fetchedCCContests);
         }
 
@@ -461,7 +526,6 @@
             const cfSection = document.getElementById('codeforces_contest_section');
             const cfCheckbox = document.getElementById('platform_codeforces');
             const cardsContainer = document.getElementById('cf_contest_list_cards');
-            const hiddenSelect = document.getElementById('codeforces_contest_select');
             const errDiv = document.getElementById('cf_contest_error');
 
             if (!cfCheckbox || !cfCheckbox.checked) {
@@ -489,6 +553,9 @@
                         errDiv.style.display = 'block';
                     } else {
                         fetchedCFContests = data.contests;
+                        if (selectedCFContests.size === 0 && fetchedCFContests.length > 0) {
+                            selectedCFContests.add(fetchedCFContests[0].title);
+                        }
                         renderCFContestCards(fetchedCFContests);
                     }
                 })
@@ -503,10 +570,12 @@
         function renderCFContestCards(contests) {
             const cardsContainer = document.getElementById('cf_contest_list_cards');
             const hiddenSelect = document.getElementById('codeforces_contest_select');
+            const badge = document.getElementById('cf_selected_badge');
             const searchVal = (document.getElementById('codeforces_contest_search').value || '').toLowerCase();
             
             cardsContainer.innerHTML = '';
             hiddenSelect.innerHTML = '';
+            hiddenSelect.multiple = true;
 
             const filtered = contests.filter(c => 
                 c.title.toLowerCase().includes(searchVal) || String(c.id).includes(searchVal) || c.date.includes(searchVal)
@@ -514,36 +583,55 @@
 
             if (filtered.length === 0) {
                 cardsContainer.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:13px;">No matching Codeforces contests found</div>';
-                return;
+            } else {
+                filtered.forEach((c) => {
+                    const isSelected = selectedCFContests.has(c.title);
+                    const itemCard = document.createElement('div');
+                    itemCard.className = `contest-item-card ${isSelected ? 'selected' : ''}`;
+                    itemCard.onclick = () => selectCFContestItem(c.title);
+                    
+                    itemCard.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" ${isSelected ? 'checked' : ''} style="accent-color:var(--accent-blue); pointer-events:none;">
+                            <span class="contest-item-title">${c.title}</span>
+                        </div>
+                        <span class="contest-item-date">${c.date}</span>
+                    `;
+                    cardsContainer.appendChild(itemCard);
+                });
             }
 
-            if (!selectedCFContestTitle && filtered.length > 0) {
-                selectedCFContestTitle = filtered[0].title;
-            }
-
-            filtered.forEach((c) => {
-                const itemCard = document.createElement('div');
-                itemCard.className = `contest-item-card ${c.title === selectedCFContestTitle ? 'selected' : ''}`;
-                itemCard.onclick = () => selectCFContestItem(c.title);
-                
-                itemCard.innerHTML = `
-                    <span class="contest-item-title">${c.title}</span>
-                    <span class="contest-item-date">${c.date}</span>
-                `;
-                cardsContainer.appendChild(itemCard);
-
+            contests.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.title;
                 opt.textContent = `${c.title} (${c.date})`;
-                if (c.title === selectedCFContestTitle) {
+                if (selectedCFContests.has(c.title)) {
                     opt.selected = true;
                 }
                 hiddenSelect.appendChild(opt);
             });
+
+            if (badge) {
+                badge.textContent = `${selectedCFContests.size} Selected`;
+            }
         }
 
         function selectCFContestItem(title) {
-            selectedCFContestTitle = title;
+            if (selectedCFContests.has(title)) {
+                selectedCFContests.delete(title);
+            } else {
+                selectedCFContests.add(title);
+            }
+            renderCFContestCards(fetchedCFContests);
+        }
+
+        function selectAllCFContests() {
+            fetchedCFContests.forEach(c => selectedCFContests.add(c.title));
+            renderCFContestCards(fetchedCFContests);
+        }
+
+        function clearCFContests() {
+            selectedCFContests.clear();
             renderCFContestCards(fetchedCFContests);
         }
 

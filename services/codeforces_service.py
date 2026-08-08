@@ -47,12 +47,13 @@ def get_latest_cf_contests(limit=6):
         return []
 
 
-def ab_row(sn, name, regno, dept, output_date=None):
+def ab_row(sn, name, regno, dept, output_date=None, target_contest_title=None):
     return {
         "S. No": sn,
         "Name of the Student": name,
         "Register No": regno,
         "Dept": dept,
+        "Target Contest": target_contest_title or "N/A",
         "Date": output_date or today_ddmmyyyy(),
         "Problem Solved": "AB",
         "Target Contest Solved": "AB",
@@ -63,8 +64,9 @@ def ab_row(sn, name, regno, dept, output_date=None):
     }
 
 
-def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target_contest_date=None):
+def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target_contest_date=None, target_contest_title=None):
     output_date = format_contest_date(target_contest_date) if target_contest_date else today_ddmmyyyy()
+    c_title = target_contest_title or (str(target_contest_id) if target_contest_id else "N/A")
 
     try:
         info = requests.get(
@@ -74,7 +76,7 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
         ).json()
 
         if info.get("status") != "OK":
-            return ab_row(sn, name, regno, dept, output_date)
+            return ab_row(sn, name, regno, dept, output_date, c_title)
 
         user = info["result"][0]
 
@@ -85,7 +87,7 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
         ).json()
 
         if subs.get("status") != "OK":
-            return ab_row(sn, name, regno, dept, output_date)
+            return ab_row(sn, name, regno, dept, output_date, c_title)
 
         solved = set()
         target_solved = set()
@@ -130,6 +132,7 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
             "Name of the Student": name,
             "Register No": regno,
             "Dept": dept,
+            "Target Contest": c_title,
             "Date": output_date,
             "Problem Solved": solved_val,
             "Target Contest Solved": target_val,
@@ -141,4 +144,4 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
 
     except Exception as e:
         print("CF error:", e)
-        return ab_row(sn, name, regno, dept, output_date)
+        return ab_row(sn, name, regno, dept, output_date, c_title)

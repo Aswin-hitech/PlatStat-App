@@ -102,46 +102,101 @@ def _load_rows(uploaded_file):
     return None
 
 
-def _analyze_rows(rows, selected_platforms, selected_lc_title=None, selected_lc_time=None, selected_cc_title=None, selected_cc_date=None, selected_cf_id=None, selected_cf_date=None):
+def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf_targets=None):
+    """
+    Returns dict mapping platform names to a list of contest table blocks:
+    {
+        "leetcode": [
+            {"contest": "Weekly Contest 400", "date": "2026-07-26", "rows": [...]},
+            ...
+        ],
+        ...
+    }
+    """
     tables = {"codeforces": [], "codechef": [], "leetcode": []}
 
-    latest_lc_title = selected_lc_title
-    latest_lc_time = selected_lc_time
-    if "leetcode" in selected_platforms and not latest_lc_title:
-        latest_lc_title, latest_lc_time = find_latest_lc_contest(rows)
+    if "leetcode" in selected_platforms and not lc_targets:
+        latest_title, latest_time = find_latest_lc_contest(rows)
+        if latest_title:
+            lc_targets = [{"title": latest_title, "startTime": latest_time}]
+        else:
+            lc_targets = [{"title": None, "startTime": None}]
 
-    for idx, row in enumerate(rows, start=1):
-        name = _clean_text(row.get("name") or row.get("studentName"))
-        regno = _clean_text(row.get("register_no") or row.get("registerNo"))
-        dept = _clean_text(row.get("department"))
+    if "codechef" in selected_platforms and not cc_targets:
+        cc_targets = [{"title": None, "date": None}]
 
-        if not name:
-            continue
+    if "codeforces" in selected_platforms and not cf_targets:
+        cf_targets = [{"title": None, "id": None, "date": None}]
 
-        if "codeforces" in selected_platforms:
-            handle = _clean_text(row.get("codeforces"))
-            if handle:
-                tables["codeforces"].append(get_cf_summary(idx, name, regno, dept, handle, target_contest_id=selected_cf_id, target_contest_date=selected_cf_date))
-
-        if "codechef" in selected_platforms:
-            handle = _clean_text(row.get("codechef"))
-            if handle:
-                tables["codechef"].append(get_cc_summary(idx, name, regno, dept, handle, target_contest_title=selected_cc_title, target_contest_date=selected_cc_date))
-
-        if "leetcode" in selected_platforms:
-            handle = _clean_text(row.get("leetcode"))
-            if handle:
-                tables["leetcode"].append(
-                    get_lc_summary(
-                        idx,
-                        name,
-                        regno,
-                        dept,
-                        handle,
-                        latest_lc_title,
-                        latest_lc_time,
+    if "codeforces" in selected_platforms:
+        for cf_t in (cf_targets or [{"title": None, "id": None, "date": None}]):
+            c_title = cf_t.get("title") or (str(cf_t.get("id")) if cf_t.get("id") else "General Summary")
+            c_rows = []
+            c_idx = 1
+            for row in rows:
+                name = _clean_text(row.get("name") or row.get("studentName"))
+                regno = _clean_text(row.get("register_no") or row.get("registerNo"))
+                dept = _clean_text(row.get("department"))
+                if not name:
+                    continue
+                handle = _clean_text(row.get("codeforces"))
+                if handle:
+                    c_rows.append(
+                        get_cf_summary(
+                            c_idx, name, regno, dept, handle,
+                            target_contest_id=cf_t.get("id"),
+                            target_contest_date=cf_t.get("date"),
+                            target_contest_title=cf_t.get("title")
+                        )
                     )
-                )
+                    c_idx += 1
+            tables["codeforces"].append({"contest": c_title, "date": cf_t.get("date"), "rows": c_rows})
+
+    if "codechef" in selected_platforms:
+        for cc_t in (cc_targets or [{"title": None, "date": None}]):
+            c_title = cc_t.get("title") or "General Summary"
+            c_rows = []
+            c_idx = 1
+            for row in rows:
+                name = _clean_text(row.get("name") or row.get("studentName"))
+                regno = _clean_text(row.get("register_no") or row.get("registerNo"))
+                dept = _clean_text(row.get("department"))
+                if not name:
+                    continue
+                handle = _clean_text(row.get("codechef"))
+                if handle:
+                    c_rows.append(
+                        get_cc_summary(
+                            c_idx, name, regno, dept, handle,
+                            target_contest_title=cc_t.get("title"),
+                            target_contest_date=cc_t.get("date")
+                        )
+                    )
+                    c_idx += 1
+            tables["codechef"].append({"contest": c_title, "date": cc_t.get("date"), "rows": c_rows})
+
+    if "leetcode" in selected_platforms:
+        for lc_t in (lc_targets or [{"title": None, "startTime": None}]):
+            c_title = lc_t.get("title") or "General Summary"
+            c_rows = []
+            c_idx = 1
+            for row in rows:
+                name = _clean_text(row.get("name") or row.get("studentName"))
+                regno = _clean_text(row.get("register_no") or row.get("registerNo"))
+                dept = _clean_text(row.get("department"))
+                if not name:
+                    continue
+                handle = _clean_text(row.get("leetcode"))
+                if handle:
+                    c_rows.append(
+                        get_lc_summary(
+                            c_idx, name, regno, dept, handle,
+                            lc_t.get("title"),
+                            lc_t.get("startTime")
+                        )
+                    )
+                    c_idx += 1
+            tables["leetcode"].append({"contest": c_title, "rows": c_rows})
 
     return tables
 
@@ -166,14 +221,16 @@ def _combined_export_frame(tables, requested_platform=None):
     target_keys = [requested_platform] if (requested_platform and requested_platform in tables) else ["codeforces", "codechef", "leetcode"]
 
     for platform in target_keys:
-        rows = tables.get(platform, [])
-        if not rows:
-            continue
-        cleaned_rows = [_clean_row_dict(r) for r in rows]
-        frame = pd.DataFrame(cleaned_rows)
-        if len(target_keys) > 1:
-            frame.insert(0, "Platform", platform.capitalize())
-        frames.append(frame)
+        contest_blocks = tables.get(platform, [])
+        for block in contest_blocks:
+            rows = block.get("rows", [])
+            if not rows:
+                continue
+            cleaned_rows = [_clean_row_dict(r) for r in rows]
+            frame = pd.DataFrame(cleaned_rows)
+            if len(target_keys) > 1:
+                frame.insert(0, "Platform", platform.capitalize())
+            frames.append(frame)
 
     if not frames:
         return pd.DataFrame()
@@ -199,17 +256,14 @@ def _auto_fit_columns(worksheet):
 
     for row in worksheet.iter_rows():
         for cell in row:
-            if cell.row == 1 and cell.value:
+            if cell.row == 1:
                 cell.fill = header_fill
                 cell.font = header_font
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             else:
                 cell.font = data_font
                 cell.border = thin_border
-                if isinstance(cell.value, (int, float)):
-                    cell.alignment = Alignment(horizontal="right", vertical="center")
-                else:
-                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                cell.alignment = Alignment(horizontal="left", vertical="center")
 
     for col in worksheet.columns:
         max_len = 0
@@ -222,46 +276,43 @@ def _auto_fit_columns(worksheet):
 
 
 def _tables_to_excel_stream(tables, requested_platform=None):
-    """Build an Excel file stream with dedicated platform worksheets and styling."""
+    """Build an Excel file stream with dedicated contest worksheets and styling."""
     output = BytesIO()
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         workbook = writer.book
 
-        active_sections = []
-        if requested_platform and tables.get(requested_platform):
-            active_sections.append((requested_platform.capitalize(), tables[requested_platform]))
-        else:
-            for p in ["codeforces", "codechef", "leetcode"]:
-                if tables.get(p):
-                    active_sections.append((p.capitalize(), tables[p]))
+        target_keys = [requested_platform] if (requested_platform and requested_platform in tables) else ["codeforces", "codechef", "leetcode"]
 
-        if not active_sections:
-            ws = workbook.create_sheet(title="Results")
-            ws.cell(row=1, column=1, value="No data found")
-        elif len(active_sections) == 1:
-            name, rows = active_sections[0]
-            cleaned_rows = [_clean_row_dict(r) for r in rows]
-            df = pd.DataFrame(cleaned_rows)
-            df.to_excel(writer, sheet_name=name, index=False)
-            ws = writer.sheets[name]
-            _auto_fit_columns(ws)
-        else:
-            combined_frame = _combined_export_frame(tables)
-            if not combined_frame.empty:
-                combined_frame.to_excel(writer, sheet_name="Combined Results", index=False)
-                ws_comb = writer.sheets["Combined Results"]
-                _auto_fit_columns(ws_comb)
+        # Combined sheet first
+        combined_frame = _combined_export_frame(tables, requested_platform=requested_platform)
+        if not combined_frame.empty:
+            combined_frame.to_excel(writer, sheet_name="Combined Results", index=False)
+            ws_comb = writer.sheets["Combined Results"]
+            _auto_fit_columns(ws_comb)
 
-            for name, rows in active_sections:
+        # Dedicated sheet per contest table
+        sheet_count = {}
+        for platform in target_keys:
+            contest_blocks = tables.get(platform, [])
+            for block in contest_blocks:
+                contest_title = block.get("contest") or platform.capitalize()
+                rows = block.get("rows", [])
+                if not rows:
+                    continue
+
+                base_name = f"{platform[:2].upper()} - {contest_title}"[:28]
+                sheet_count[base_name] = sheet_count.get(base_name, 0) + 1
+                sheet_name = base_name if sheet_count[base_name] == 1 else f"{base_name[:25]} ({sheet_count[base_name]})"
+
                 cleaned_rows = [_clean_row_dict(r) for r in rows]
                 df = pd.DataFrame(cleaned_rows)
-                df.to_excel(writer, sheet_name=name, index=False)
-                ws = writer.sheets[name]
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                ws = writer.sheets[sheet_name]
                 _auto_fit_columns(ws)
 
         if "Sheet" in workbook.sheetnames and len(workbook.sheetnames) > 1:
-            workbook.remove(workbook["Sheet"])
+            del workbook["Sheet"]
 
     output.seek(0)
     return output
@@ -308,51 +359,63 @@ def index():
     if not selected_platforms:
         return render_template("index.html", error="Select at least one platform to track."), 400
 
-    selected_lc_title = None
-    selected_lc_time = None
+    lc_targets = []
     if "leetcode" in selected_platforms:
-        lc_contest_val = _clean_text(request.form.get("leetcode_contest"))
-        if not lc_contest_val:
-            return render_template("index.html", error="Please select a LeetCode contest before fetching rankings."), 400
+        lc_vals = [c.strip() for c in request.form.getlist("leetcode_contest") if c and c.strip()]
+        if not lc_vals and request.form.get("leetcode_contest"):
+            lc_vals = [request.form.get("leetcode_contest").strip()]
+
+        if not lc_vals:
+            return render_template("index.html", error="Please select at least one LeetCode contest before fetching rankings."), 400
 
         try:
-            contests = get_latest_lc_contests(6)
-            matched = next((c for c in contests if c["title"] == lc_contest_val or c["titleSlug"] == lc_contest_val), None)
-            if matched:
-                selected_lc_title = matched["title"]
-                selected_lc_time = matched["startTime"]
-            else:
-                selected_lc_title = lc_contest_val
-                selected_lc_time = 0
+            contests = get_latest_lc_contests(15)
+            for val in lc_vals:
+                matched = next((c for c in contests if c["title"] == val or c["titleSlug"] == val), None)
+                if matched:
+                    lc_targets.append({"title": matched["title"], "startTime": matched["startTime"]})
+                else:
+                    lc_targets.append({"title": val, "startTime": 0})
         except Exception as e:
             return render_template("index.html", error=f"Failed to fetch LeetCode contests from API: {str(e)}"), 500
 
-    selected_cc_title = None
-    selected_cc_date = None
+    cc_targets = []
     if "codechef" in selected_platforms:
-        selected_cc_title = _clean_text(request.form.get("codechef_contest"))
-        if selected_cc_title:
-            try:
-                cc_contests = get_latest_cc_contests(10)
-                matched_cc = next((c for c in cc_contests if c["title"] == selected_cc_title), None)
-                if matched_cc:
-                    selected_cc_date = matched_cc["date"]
-            except Exception:
-                pass
+        cc_vals = [c.strip() for c in request.form.getlist("codechef_contest") if c and c.strip()]
+        if not cc_vals and request.form.get("codechef_contest"):
+            cc_vals = [request.form.get("codechef_contest").strip()]
 
-    selected_cf_id = None
-    selected_cf_date = None
-    if "codeforces" in selected_platforms:
-        cf_contest_val = _clean_text(request.form.get("codeforces_contest"))
-        if cf_contest_val:
+        if cc_vals:
             try:
-                cf_contests = get_latest_cf_contests(10)
-                matched_cf = next((c for c in cf_contests if c["title"] == cf_contest_val or str(c.get("id")) == cf_contest_val), None)
-                if matched_cf:
-                    selected_cf_id = matched_cf.get("id")
-                    selected_cf_date = matched_cf.get("date")
+                cc_contests = get_latest_cc_contests(15)
+                for val in cc_vals:
+                    matched_cc = next((c for c in cc_contests if c["title"] == val or c["code"] == val), None)
+                    if matched_cc:
+                        cc_targets.append({"title": matched_cc["title"], "date": matched_cc["date"]})
+                    else:
+                        cc_targets.append({"title": val, "date": None})
             except Exception:
-                pass
+                for val in cc_vals:
+                    cc_targets.append({"title": val, "date": None})
+
+    cf_targets = []
+    if "codeforces" in selected_platforms:
+        cf_vals = [c.strip() for c in request.form.getlist("codeforces_contest") if c and c.strip()]
+        if not cf_vals and request.form.get("codeforces_contest"):
+            cf_vals = [request.form.get("codeforces_contest").strip()]
+
+        if cf_vals:
+            try:
+                cf_contests = get_latest_cf_contests(15)
+                for val in cf_vals:
+                    matched_cf = next((c for c in cf_contests if c["title"] == val or str(c.get("id")) == val), None)
+                    if matched_cf:
+                        cf_targets.append({"title": matched_cf["title"], "id": matched_cf.get("id"), "date": matched_cf.get("date")})
+                    else:
+                        cf_targets.append({"title": val, "id": val, "date": None})
+            except Exception:
+                for val in cf_vals:
+                    cf_targets.append({"title": val, "id": val, "date": None})
 
     uploaded_file = request.files.get("csvfile")
     rows = []
@@ -376,10 +439,26 @@ def index():
             error="Provide at least one platform ID for the selected platforms.",
         ), 400
 
-    tables = _analyze_rows(rows, selected_platforms, selected_lc_title, selected_lc_time, selected_cc_title, selected_cc_date, selected_cf_id, selected_cf_date)
+    tables = _analyze_rows(rows, selected_platforms, lc_targets, cc_targets, cf_targets)
 
     global cache_tables
     cache_tables = tables
+
+    student_count = len(rows)
+    platforms_str = ", ".join([p.capitalize() for p in selected_platforms])
+    if uploaded_file and uploaded_file.filename:
+        toast_title = "File Upload & Evaluation Completed 🚀"
+        toast_msg = f"Successfully uploaded '{uploaded_file.filename}' and evaluated stats for {student_count} student records across {platforms_str}."
+    else:
+        toast_title = "Student Stats Evaluation Completed 🎯"
+        toast_msg = f"Successfully evaluated stats for {student_count} student records across {platforms_str}."
+
+    notification_manager.send_notification(
+        user_id="default_user",
+        title=toast_title,
+        message=toast_msg,
+        n_type="fetch_complete"
+    )
 
     return render_template(
         "results.html",
@@ -387,6 +466,7 @@ def index():
         codechef=tables["codechef"],
         leetcode=tables["leetcode"],
         selected_platforms=selected_platforms,
+        completion_toast={"title": toast_title, "message": toast_msg, "icon": "🚀" if uploaded_file else "🎯"}
     )
 
 
@@ -395,7 +475,10 @@ def download():
     export_format = request.args.get("format", "xlsx").lower()
     requested_platform = request.args.get("platform", "").lower().strip()
 
-    has_data = any(cache_tables.get(key) for key in ("codeforces", "codechef", "leetcode"))
+    has_data = any(
+        any(b.get("rows") for b in cache_tables.get(key, []))
+        for key in ("codeforces", "codechef", "leetcode")
+    )
     if not has_data:
         return "No data to download.", 404
 
@@ -505,6 +588,24 @@ def topper():
             if view_mode in ("10", "top10", "both"):
                 result["top10"] = ranked.head(10).to_dict("records")
 
+            month_names = {1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December'}
+            month_label = month_names.get(month, f"Month {month}")
+            toast_title = "Topper Calculation Completed 🏆"
+            toast_msg = f"Calculated top performers for {platform.capitalize()} ({month_label})."
+            notification_manager.send_notification(
+                user_id="default_user",
+                title=toast_title,
+                message=toast_msg,
+                n_type="topper_complete"
+            )
+            return render_template(
+                "topper.html",
+                result=result,
+                error=error,
+                view_mode=view_mode,
+                completion_toast={"title": toast_title, "message": toast_msg, "icon": "🏆"}
+            )
+
     except Exception as exc:
         error = str(exc)
 
@@ -549,6 +650,17 @@ def get_contests():
 @app.route("/api/contests/sync", methods=["POST"])
 def sync_contests():
     res = contest_service.sync_contests()
+    synced_cnt = res.get("syncedCount", 0) if isinstance(res, dict) else 0
+    toast_title = "Contest Sync Completed 🔄"
+    toast_msg = f"Synced latest competitive programming contests ({synced_cnt} active/upcoming)."
+    notification_manager.send_notification(
+        user_id="default_user",
+        title=toast_title,
+        message=toast_msg,
+        n_type="sync_complete"
+    )
+    if isinstance(res, dict):
+        res["toast"] = {"title": toast_title, "message": toast_msg, "icon": "🔄"}
     return jsonify(res)
 
 

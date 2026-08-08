@@ -127,6 +127,7 @@ def get_cc_summary(sn, name, regno, dept, user, target_contest_title=None, targe
         "Name of the Student": name,
         "Register No": regno,
         "Dept": dept,
+        "Target Contest": target_contest_title or "N/A",
         "Date": output_date,
         "Current Rating": "AB",
         "Highest Rating": "AB",

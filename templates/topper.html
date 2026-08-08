@@ -177,7 +177,56 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadNavNotifications);
+        function showToastAlert(title, message, icon = '🔔', duration = 6000) {
+            let container = document.getElementById('toast_container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast_container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = 'toast-alert';
+            toast.innerHTML = `
+                <span class="toast-icon">${icon}</span>
+                <div class="toast-body">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+                <button type="button" class="toast-close" onclick="closeToastAlert(this)">✖</button>
+            `;
+
+            container.appendChild(toast);
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification(title, { body: message, icon: '/static/favicon.ico' });
+                } catch (e) {}
+            }
+
+            setTimeout(() => {
+                closeToastAlert(toast.querySelector('.toast-close'));
+            }, duration);
+        }
+
+        function closeToastAlert(btn) {
+            if (!btn) return;
+            const toast = btn.closest('.toast-alert');
+            if (toast) {
+                toast.classList.add('hide');
+                setTimeout(() => {
+                    if (toast.parentElement) toast.parentElement.removeChild(toast);
+                }, 400);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadNavNotifications();
+            {% if completion_toast %}
+            showToastAlert({{ completion_toast.title|tojson }}, {{ completion_toast.message|tojson }}, {{ completion_toast.icon|default('🏆')|tojson }});
+            {% endif %}
+        });
     </script>
 </body>
 </html>
