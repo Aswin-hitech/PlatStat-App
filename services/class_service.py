@@ -1,7 +1,9 @@
 from datetime import datetime
 from bson import ObjectId
-from repositories import ClassRepository
+from repositories import ClassRepository, _safe_oid
+
 class_repo = ClassRepository()
+
 
 class ClassService:
     def __init__(self):
@@ -11,13 +13,13 @@ class ClassService:
         return class_repo.create_class(data)
 
     def get_class(self, class_id):
-        return class_repo.find_one({"_id": ObjectId(class_id)})
+        return class_repo.find_one({"_id": _safe_oid(class_id)})
 
     def list_classes(self, archived=False, search=""):
         return class_repo.list_classes(archived=archived, search=search)
 
     def update_class(self, class_id, data):
-        return class_repo.update_one({"_id": ObjectId(class_id)}, data)
+        return class_repo.update_one({"_id": _safe_oid(class_id)}, data)
 
     def archive_class(self, class_id):
         return class_repo.archive_class(class_id)
@@ -27,3 +29,4 @@ class ClassService:
 
     def delete_class(self, class_id):
         return class_repo.delete_class_cascade(class_id)
+

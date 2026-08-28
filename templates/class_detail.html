@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
     <title>Class Detail - {{ class_data.className }}</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="shortcut icon" type="image/x-icon" href="/static/favicon.ico">
@@ -10,88 +11,259 @@
 </head>
 
 <body class="results-page">
-    <nav class="navbar navbar-glass">
-        <a href="/" class="nav-brand">
-            <img src="/static/favicon.ico" alt="PlatStat Logo" class="nav-logo">
-            <span class="nav-title">PlatStat</span>
-        </a>
-        <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
-            <span class="sandwich-icon">
-                <span></span>
-                <span></span>
-                <span></span>
-            </span>
-        </button>
-        <div class="nav-links" id="navLinks">
-            <a href="/">Home</a>
-            <a href="/dashboard">Dashboard</a>
-        </div>
-    </nav>
-
-    <div class="wide-card">
-        <div class="hero">
-            <div>
-                <p class="eyebrow">Class Management</p>
-                <h2>{{ class_data.className }} ({{ class_data.academicYear }})</h2>
-                <p>{{ class_data.description }}</p>
-                <p>Department: {{ class_data.department }} | College: {{ class_data.college }} {% if class_data.section %}| Section: {{ class_data.section }}{% endif %}</p>
-                <p>Students: {{ class_data.studentCount }} | Last Fetch: {{ class_data.lastFetchDate or 'N/A' }} | Total Fetches: {{ class_data.totalFetches }}</p>
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <nav class="navbar">
+            <a href="/" class="nav-brand">
+                <img src="/static/favicon.ico" alt="PlatStat Logo" class="nav-logo">
+                <span class="nav-title">PlatStat</span>
+            </a>
+            <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" onclick="toggleMobileNav()">
+                <span class="sandwich-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+            <div class="nav-links" id="navLinks">
+                <a href="/">Analyzer</a>
+                <a href="/dashboard" class="active">Dashboard</a>
+                <a href="/topper">Topper Calculator</a>
+                <a href="/contests">Contest Center</a>
+                <a href="/notifications">Notifications <span class="nav-badge" id="nav_unread_badge" style="display:none;">0</span></a>
             </div>
-            <div class="hero-actions">
-                <button onclick="openEditClassModal('{{ class_data._id }}')" class="secondary-button">Edit Class</button>
-                <button onclick="confirmDeleteClass('{{ class_data._id }}')" class="secondary-button delete-button">Delete Class</button>
-                <button onclick="openAddStudentModal()">Add Student</button>
-                <button onclick="openImportStudentsModal()">Import Students</button>
-                <button onclick="startFetch('{{ class_data._id }}')">Start Fetch</button>
-                <button onclick="exportStudents('{{ class_data._id }}')" class="secondary-button">Export Students</button>
+        </nav>
+
+        <div class="wide-card" style="margin-top: 24px;">
+            <div class="hero">
+                <div>
+                    <p class="eyebrow">Class Management</p>
+                    <h2>{{ class_data.className }} ({{ class_data.academicYear }})</h2>
+                    <p style="color: var(--text-secondary); margin: 6px 0;">{{ class_data.description or 'No description provided.' }}</p>
+                    <p style="font-size: 14px; color: var(--text-muted);">
+                        <strong>Department:</strong> {{ class_data.department }} | 
+                        <strong>College:</strong> {{ class_data.college }} 
+                        {% if class_data.section %}| <strong>Section:</strong> {{ class_data.section }}{% endif %}
+                    </p>
+                    <p style="font-size: 14px; color: var(--text-muted); margin-top: 4px;">
+                        <strong>Students:</strong> {{ class_data.studentCount }} | 
+                        <strong>Last Fetch:</strong> {{ class_data.lastFetchDate or 'N/A' }} | 
+                        <strong>Total Fetches:</strong> {{ class_data.totalFetches }}
+                    </p>
+                </div>
+                <div class="hero-actions" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <button onclick="openEditClassModal('{{ class_data._id }}')" class="secondary-button">✏️ Edit Class</button>
+                    <button onclick="openAddStudentModal()" class="primary-button">➕ Add Student</button>
+                    <button onclick="openImportStudentsModal()" class="secondary-button">📥 Import Roster</button>
+                    <button onclick="startFetch('{{ class_data._id }}')" class="btn-sync" style="padding: 10px 18px;">⚡ Start Fetch</button>
+                    <button onclick="exportStudents('{{ class_data._id }}')" class="secondary-button">📊 Export Roster</button>
+                    <button onclick="confirmDeleteClass('{{ class_data._id }}')" class="secondary-button delete-button" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;">🗑️ Delete Class</button>
+                </div>
+            </div>
+
+            <div style="margin-top: 32px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.3rem; margin: 0;">Class Students Roster</h3>
+                    <span class="badge">{{ students|length }} Enrolled</span>
+                </div>
+
+                {% if students|length > 0 %}
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Register No</th>
+                                <th>Department</th>
+                                <th>Codeforces ID</th>
+                                <th>CodeChef ID</th>
+                                <th>LeetCode ID</th>
+                                <th style="text-align: center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td style="font-weight: 700; color: #fff;">{{ student.studentName }}</td>
+                                <td><code>{{ student.registerNo }}</code></td>
+                                <td>{{ student.department or '-' }}</td>
+                                <td>
+                                    {% if student.platformIds and student.platformIds.codeforces %}
+                                        <a href="https://codeforces.com/profile/{{ student.platformIds.codeforces }}" target="_blank" style="color: var(--cyan-glow); text-decoration: none;">{{ student.platformIds.codeforces }}</a>
+                                    {% elif student.codeforces %}
+                                        <a href="https://codeforces.com/profile/{{ student.codeforces }}" target="_blank" style="color: var(--cyan-glow); text-decoration: none;">{{ student.codeforces }}</a>
+                                    {% else %}
+                                        <span style="color: var(--text-muted);">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if student.platformIds and student.platformIds.codechef %}
+                                        <a href="https://www.codechef.com/users/{{ student.platformIds.codechef }}" target="_blank" style="color: var(--cyan-glow); text-decoration: none;">{{ student.platformIds.codechef }}</a>
+                                    {% elif student.codechef %}
+                                        <a href="https://www.codechef.com/users/{{ student.codechef }}" target="_blank" style="color: var(--cyan-glow); text-decoration: none;">{{ student.codechef }}</a>
+                                    {% else %}
+                                        <span style="color: var(--text-muted);">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if student.platformIds and student.platformIds.leetcode %}
+                                        <a href="https://leetcode.com/u/{{ student.platformIds.leetcode }}" target="_blank" style="color: var(--cyan-glow); text-decoration: none;">{{ student.platformIds.leetcode }}</a>
+                                    {% elif student.leetcode %}
+                                        <a href="https://leetcode.com/u/{{ student.leetcode }}" target="_blank" style="color: var(--cyan-glow); text-decoration: none;">{{ student.leetcode }}</a>
+                                    {% else %}
+                                        <span style="color: var(--text-muted);">-</span>
+                                    {% endif %}
+                                </td>
+                                <td style="text-align: center;">
+                                    <div style="display: inline-flex; gap: 6px;">
+                                        <button onclick="openEditStudentModal({{ student.studentId|tojson }}, {{ student.studentName|default('')|tojson }}, {{ student.registerNo|default('')|tojson }}, {{ student.department|default('')|tojson }}, {{ student.section|default('')|tojson }}, {{ (student.platformIds.codeforces or student.codeforces)|default('')|tojson }}, {{ (student.platformIds.codechef or student.codechef)|default('')|tojson }}, {{ (student.platformIds.leetcode or student.leetcode)|default('')|tojson }}, {{ student.email|default('')|tojson }})" class="ghost-button" style="padding: 4px 10px; font-size: 12px;">Edit</button>
+                                        <button onclick="confirmDeleteStudent('{{ student.studentId }}', '{{ class_data._id }}')" class="ghost-button delete-button" style="padding: 4px 10px; font-size: 12px;">Delete</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div style="text-align: center; padding: 48px 20px; background: rgba(3, 10, 24, 0.5); border: 1px dashed var(--input-border); border-radius: var(--radius-md);">
+                    <div style="font-size: 36px; margin-bottom: 8px;">👥</div>
+                    <h4 style="color: var(--text-primary); margin-bottom: 6px;">No Students Added Yet</h4>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">Use the buttons above to manually add students or import a batch CSV/Excel roster.</p>
+                    <div style="display: flex; gap: 10px; justify-content: center;">
+                        <button onclick="openAddStudentModal()" class="primary-button">➕ Add First Student</button>
+                        <button onclick="openImportStudentsModal()" class="secondary-button">📥 Import File</button>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
 
-        <h3>Students</h3>
-        {% if students|length > 0 %}
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Register No</th>
-                        <th>Department</th>
-                        <th>Codeforces ID</th>
-                        <th>CodeChef ID</th>
-                        <th>LeetCode ID</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for student in students %}
-                    <tr>
-                        <td>{{ student.studentName }}</td>
-                        <td>{{ student.registerNo }}</td>
-                        <td>{{ student.department }}</td>
-                        <td>{{ student.platformIds.codeforces or student.codeforces or 'N/A' }}</td>
-                        <td>{{ student.platformIds.codechef or student.codechef or 'N/A' }}</td>
-                        <td>{{ student.platformIds.leetcode or student.leetcode or 'N/A' }}</td>
-                        <td>
-                            <button onclick="openEditStudentModal({{ student.studentId|tojson }}, {{ student.studentName|default('')|tojson }}, {{ student.registerNo|default('')|tojson }}, {{ student.department|default('')|tojson }}, {{ student.platformIds.codeforces|default('')|tojson }}, {{ student.platformIds.codechef|default('')|tojson }}, {{ student.platformIds.leetcode|default('')|tojson }})" class="ghost-button">Edit</button>
-                            <button onclick="confirmDeleteStudent('{{ student.studentId }}', '{{ class_data.classId }}')" class="ghost-button delete-button">Delete</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <!-- Add Student Modal -->
+        <div id="addStudentModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:1000;">
+            <div class="modal-content" style="background:#131d31; border:1px solid var(--input-border); padding:24px; border-radius:12px; max-width:550px; width:90%; max-height:90vh; overflow-y:auto;">
+                <h3 style="font-family:'Outfit', sans-serif; color:var(--text-primary); margin-bottom:16px;">Add Single Student</h3>
+                <form id="addStudentForm">
+                    <input type="hidden" name="classId" value="{{ class_data._id }}">
+                    <div class="form-group">
+                        <label for="addStudentName">Student Full Name <span style="color:#ff6b6b;">*</span></label>
+                        <input type="text" id="addStudentName" name="studentName" placeholder="e.g., Alex Johnson" required style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="addRegisterNo">Register / Roll Number <span style="color:#ff6b6b;">*</span></label>
+                        <input type="text" id="addRegisterNo" name="registerNo" placeholder="e.g., 2026CS101" required style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div style="display:flex; gap:12px; margin-top:12px;">
+                        <div style="flex:1;">
+                            <label for="addDepartment">Department</label>
+                            <input type="text" id="addDepartment" name="department" value="{{ class_data.department }}" placeholder="e.g., CSE" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                        </div>
+                        <div style="flex:1;">
+                            <label for="addSection">Section</label>
+                            <input type="text" id="addSection" name="section" value="{{ class_data.section or '' }}" placeholder="e.g., A" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="addEmail">Email (Optional)</label>
+                        <input type="email" id="addEmail" name="email" placeholder="e.g., alex@college.edu" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="addCodeforces">Codeforces Username</label>
+                        <input type="text" id="addCodeforces" name="codeforces" placeholder="e.g., tourist" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="addCodechef">CodeChef Username</label>
+                        <input type="text" id="addCodechef" name="codechef" placeholder="e.g., chef_alex" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="addLeetcode">LeetCode Username</label>
+                        <input type="text" id="addLeetcode" name="leetcode" placeholder="e.g., alex_coder" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+                        <button type="button" class="ghost-button" onclick="closeAddStudentModal()">Cancel</button>
+                        <button type="submit" class="primary-button">Save Student</button>
+                    </div>
+                </form>
+            </div>
         </div>
-        {% else %}
-        <p>No students added to this class yet. Use the 'Add Student' or 'Import Students' buttons to get started.</p>
-        {% endif %}
 
-        <!-- Modals will be added here -->
+        <!-- Edit Student Modal -->
+        <div id="editStudentModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:1000;">
+            <div class="modal-content" style="background:#131d31; border:1px solid var(--input-border); padding:24px; border-radius:12px; max-width:550px; width:90%; max-height:90vh; overflow-y:auto;">
+                <h3 style="font-family:'Outfit', sans-serif; color:var(--text-primary); margin-bottom:16px;">Edit Student Record</h3>
+                <form id="editStudentForm">
+                    <input type="hidden" id="editStudentId" name="studentId">
+                    <div class="form-group">
+                        <label for="editStudentName">Student Full Name <span style="color:#ff6b6b;">*</span></label>
+                        <input type="text" id="editStudentName" name="studentName" required style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="editRegisterNo">Register / Roll Number <span style="color:#ff6b6b;">*</span></label>
+                        <input type="text" id="editRegisterNo" name="registerNo" required style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div style="display:flex; gap:12px; margin-top:12px;">
+                        <div style="flex:1;">
+                            <label for="editDepartment">Department</label>
+                            <input type="text" id="editDepartment" name="department" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                        </div>
+                        <div style="flex:1;">
+                            <label for="editSection">Section</label>
+                            <input type="text" id="editSection" name="section" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="editEmail">Email</label>
+                        <input type="email" id="editEmail" name="email" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="editCodeforces">Codeforces Username</label>
+                        <input type="text" id="editCodeforces" name="codeforces" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="editCodechef">CodeChef Username</label>
+                        <input type="text" id="editCodechef" name="codechef" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="editLeetcode">LeetCode Username</label>
+                        <input type="text" id="editLeetcode" name="leetcode" style="width:100%; padding:10px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+                        <button type="button" class="ghost-button" onclick="closeEditStudentModal()">Cancel</button>
+                        <button type="submit" class="primary-button">Update Student</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Import Students Modal -->
+        <div id="importStudentsModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:1000;">
+            <div class="modal-content" style="background:#131d31; border:1px solid var(--input-border); padding:24px; border-radius:12px; max-width:550px; width:90%;">
+                <h3 style="font-family:'Outfit', sans-serif; color:var(--text-primary); margin-bottom:12px;">Import Students Roster</h3>
+                <p style="color:var(--text-secondary); font-size:14px; margin-bottom:16px;">Upload a CSV or Excel file containing columns: <code>studentName</code> (or Name), <code>registerNo</code> (or Reg No), <code>department</code>, <code>codeforces</code>, <code>codechef</code>, <code>leetcode</code>.</p>
+                <form id="importStudentsForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="importFile">Choose CSV / Excel File <span style="color:#ff6b6b;">*</span></label>
+                        <input type="file" id="importFile" name="file" accept=".csv,.xlsx,.xls" required style="width:100%; padding:12px; background:var(--input-bg); border:1px dashed var(--input-border); border-radius:6px; color:#fff;">
+                    </div>
+                    <div style="margin-top:14px; display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="updateExistingCheck" name="update_existing" value="true">
+                        <label for="updateExistingCheck" style="font-size:14px; cursor:pointer; color:var(--text-secondary);">Update handles for existing students if already registered</label>
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+                        <button type="button" class="ghost-button" onclick="closeImportStudentsModal()">Cancel</button>
+                        <button type="submit" class="primary-button" id="btn_submit_import">Upload & Import</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         {% include 'edit_class_modal.html' %}
-
     </div>
 
     <script>
         function openEditClassModal(classId) {
-            // Fetch class data and populate modal fields
             fetch(`/api/classes/${classId}`)
                 .then(resp => resp.json())
                 .then(cls => {
@@ -152,7 +324,7 @@
                 .then(data => {
                     if (data.status === 'deleted') {
                         alert('Class deleted successfully.');
-                        window.location.href = '/dashboard'; // Redirect to dashboard after deletion
+                        window.location.href = '/dashboard';
                     } else {
                         alert('Failed to delete class: ' + (data.error || 'Unknown error'));
                     }
@@ -165,27 +337,165 @@
         }
 
         function openAddStudentModal() {
-            alert("Add Student functionality will be implemented here.");
+            document.getElementById('addStudentModal').style.display = 'flex';
         }
+
+        function closeAddStudentModal() {
+            document.getElementById('addStudentModal').style.display = 'none';
+            document.getElementById('addStudentForm').reset();
+        }
+
+        document.getElementById('addStudentForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+            const data = {};
+            formData.forEach((value, key) => { data[key] = value; });
+
+            fetch('/api/students', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(resp => resp.json())
+            .then(result => {
+                if (result.error) {
+                    alert('Error: ' + result.error);
+                } else if (result.status === 'skipped') {
+                    alert('Skipped: ' + result.reason);
+                } else {
+                    alert('Student added successfully!');
+                    closeAddStudentModal();
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                console.error('Add student error:', err);
+                alert('Failed to add student.');
+            });
+        });
+
+        function openEditStudentModal(studentId, name, regno, dept, sec, cf, cc, lc, email) {
+            document.getElementById('editStudentId').value = studentId || '';
+            document.getElementById('editStudentName').value = name || '';
+            document.getElementById('editRegisterNo').value = regno || '';
+            document.getElementById('editDepartment').value = dept || '';
+            document.getElementById('editSection').value = sec || '';
+            document.getElementById('editEmail').value = email || '';
+            document.getElementById('editCodeforces').value = cf || '';
+            document.getElementById('editCodechef').value = cc || '';
+            document.getElementById('editLeetcode').value = lc || '';
+            document.getElementById('editStudentModal').style.display = 'flex';
+        }
+
+        function closeEditStudentModal() {
+            document.getElementById('editStudentModal').style.display = 'none';
+        }
+
+        document.getElementById('editStudentForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const studentId = document.getElementById('editStudentId').value;
+            const formData = new FormData(this);
+            const data = {};
+            formData.forEach((value, key) => { data[key] = value; });
+
+            fetch(`/api/students/${studentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(resp => resp.json())
+            .then(result => {
+                if (result.error) {
+                    alert('Error updating student: ' + result.error);
+                } else {
+                    alert('Student updated successfully!');
+                    closeEditStudentModal();
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                console.error('Edit student error:', err);
+                alert('Failed to update student.');
+            });
+        });
 
         function openImportStudentsModal() {
-            alert("Import Students functionality will be implemented here.");
+            document.getElementById('importStudentsModal').style.display = 'flex';
         }
 
+        function closeImportStudentsModal() {
+            document.getElementById('importStudentsModal').style.display = 'none';
+            document.getElementById('importStudentsForm').reset();
+        }
+
+        document.getElementById('importStudentsForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+            const btn = document.getElementById('btn_submit_import');
+            btn.disabled = true;
+            btn.textContent = 'Importing...';
+
+            fetch(`/api/classes/{{ class_data._id }}/import`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(resp => resp.json())
+            .then(res => {
+                btn.disabled = false;
+                btn.textContent = 'Upload & Import';
+                if (res.error) {
+                    alert('Import Error: ' + res.error);
+                } else {
+                    const r = res.result;
+                    alert(`Import Complete!\n\nInserted: ${r.inserted}\nUpdated: ${r.updated}\nSkipped: ${r.skipped}\nFailed: ${r.failed}`);
+                    closeImportStudentsModal();
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.textContent = 'Upload & Import';
+                console.error('Import error:', err);
+                alert('Failed to import roster.');
+            });
+        });
+
         function startFetch(classId) {
-            alert("Start Fetch functionality will be implemented here.");
+            if (confirm("Fetch and evaluate live stats for all students in this class across Codeforces, CodeChef, and LeetCode?")) {
+                const toast = document.createElement('div');
+                toast.className = 'completion-toast-banner';
+                toast.innerHTML = '<strong>⚡ Fetching In Progress:</strong> Evaluating live coding profiles. Please wait...';
+                document.body.appendChild(toast);
+
+                fetch(`/api/classes/${classId}/fetch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platforms: ['codeforces', 'codechef', 'leetcode'] })
+                })
+                .then(resp => resp.json())
+                .then(res => {
+                    toast.remove();
+                    if (res.error) {
+                        alert('Fetch Error: ' + res.error);
+                    } else {
+                        alert('Fetch completed successfully! Results are saved and updated in system history.');
+                        window.location.reload();
+                    }
+                })
+                .catch(err => {
+                    toast.remove();
+                    console.error('Fetch error:', err);
+                    alert('An error occurred during fetch.');
+                });
+            }
         }
 
         function exportStudents(classId) {
             window.location.href = `/api/classes/${classId}/students/export`;
         }
 
-        function openEditStudentModal(studentId, studentName, registerNo, department, codeforcesId, codechefId, leetcodeId) {
-            alert(`Edit student ${studentName} functionality will be implemented here.`);
-        }
-
         function confirmDeleteStudent(studentId, classId) {
-            if (confirm("Are you sure you want to delete this student?")) {
+            if (confirm("Are you sure you want to delete this student from the class?")) {
                 fetch(`/api/students/${studentId}`, {
                     method: 'DELETE'
                 })
@@ -193,7 +503,7 @@
                 .then(data => {
                     if (data.status === 'deleted') {
                         alert('Student deleted successfully.');
-                        window.location.reload(); // Reload the page to reflect changes
+                        window.location.reload();
                     } else {
                         alert('Failed to delete student: ' + (data.error || 'Unknown error'));
                     }
@@ -204,6 +514,24 @@
                 });
             }
         }
+
+        function loadNavNotifications() {
+            fetch('/api/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const badge = document.getElementById('nav_unread_badge');
+                    if (badge) {
+                        if (data.unreadCount > 0) {
+                            badge.textContent = data.unreadCount;
+                            badge.style.display = 'inline-block';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(err => console.error('Error loading notifications:', err));
+        }
+
         function toggleMobileNav() {
             const btn = document.getElementById('navToggle');
             const links = document.getElementById('navLinks');
@@ -212,7 +540,10 @@
                 links.classList.toggle('show');
             }
         }
+
+        document.addEventListener('DOMContentLoaded', loadNavNotifications);
     </script>
 </body>
 
 </html>
+

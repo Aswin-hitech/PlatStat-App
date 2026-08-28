@@ -36,13 +36,25 @@ class BaseRepository:
         return self.collection.delete_many(query)
 
 
+def _safe_oid(val):
+    if isinstance(val, ObjectId):
+        return val
+    try:
+        if ObjectId.is_valid(str(val)):
+            return ObjectId(str(val))
+    except Exception:
+        pass
+    return str(val)
+
+
 class ClassRepository(BaseRepository):
     def __init__(self):
         super().__init__("classes")
 
     def create_class(self, data):
-        # Use MongoDB ObjectId as the primary identifier
+        cid = data.get("classId") or str(uuid.uuid4())
         payload = {
+            "classId": cid,
             "className": (data.get("className") or "").strip(),
             "academicYear": (data.get("academicYear") or data.get("year") or "").strip(),
             "year": (data.get("academicYear") or data.get("year") or "").strip(),
@@ -58,7 +70,6 @@ class ClassRepository(BaseRepository):
             "lastFetchDate": None,
             "lastUpdated": datetime.utcnow(),
         }
-        # Insert and return the document which now contains the generated ObjectId as `_id`
         return self.create(payload)
 
     def list_classes(self, archived=False, search=""):
@@ -76,16 +87,19 @@ class ClassRepository(BaseRepository):
         return items
 
     def archive_class(self, class_id):
-        return self.update_one({"_id": ObjectId(class_id)}, {"archived": True})
+        oid = _safe_oid(class_id)
+        return self.update_one({"_id": oid}, {"archived": True})
 
     def restore_class(self, class_id):
-        return self.update_one({"_id": ObjectId(class_id)}, {"archived": False})
+        oid = _safe_oid(class_id)
+        return self.update_one({"_id": oid}, {"archived": False})
 
     def touch_fetch_stats(self, class_id):
-        cls = self.find_one({"_id": ObjectId(class_id)})
+        oid = _safe_oid(class_id)
+        cls = self.find_one({"_id": oid})
         total = (cls or {}).get("totalFetches", 0) + 1
         return self.update_one(
-            {"_id": ObjectId(class_id)},
+            {"_id": oid},
             {
                 "totalFetches": total,
                 "lastFetchDate": datetime.utcnow(),
@@ -94,14 +108,15 @@ class ClassRepository(BaseRepository):
         )
 
     def refresh_student_count(self, class_id):
-        count = store.students.count_documents({"classId": ObjectId(class_id)})
+        oid = _safe_oid(class_id)
+        count = store.students.count_documents({"classId": oid})
         return self.update_one(
-            {"_id": ObjectId(class_id)},
+            {"_id": oid},
             {"studentCount": count, "lastUpdated": datetime.utcnow()},
         )
 
     def delete_class_cascade(self, class_id):
-        oid = ObjectId(class_id)
+        oid = _safe_oid(class_id)
         store.students.delete_many({"classId": oid})
         store.platform_stats.delete_many({"classId": oid})
         store.rankings.delete_many({"classId": oid})
@@ -122,9 +137,10 @@ class StudentRepository(BaseRepository):
             "codechef": data.get("codechef", ""),
             "leetcode": data.get("leetcode", ""),
         }
+        cid = _safe_oid(data.get("classId", ""))
         payload = {
             "studentId": student_id,
-            "classId": data.get("classId", ""),
+            "classId": cid,
             "studentName": data.get("studentName") or data.get("name", ""),
             "registerNo": data.get("registerNo") or data.get("register_no", ""),
             "department": data.get("department", ""),
@@ -142,8 +158,7 @@ class StudentRepository(BaseRepository):
         return self.create(payload)
 
     def find_by_class(self, class_id, search="", page=1, page_size=0, sort=None):
-        # Ensure class_id is an ObjectId for proper querying
-        oid = ObjectId(class_id)
+        oid = _safe_oid(class_id)
         query = {"classId": oid}
         items = self.find(query=query, sort=sort or [("createdAt", -1)])
         if search:
@@ -163,8 +178,7 @@ class StudentRepository(BaseRepository):
         return items, total
 
     def find_duplicate(self, class_id, register_no="", name=""):
-        # Use ObjectId for class lookup
-        oid = ObjectId(class_id)
+        oid = _safe_oid(class_id)
         if register_no:
             found = self.find_one({"classId": oid, "registerNo": register_no})
             if found:

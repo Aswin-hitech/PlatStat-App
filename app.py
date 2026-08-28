@@ -1,10 +1,14 @@
+from datetime import datetime
 from io import BytesIO
+from bson import ObjectId
 
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 
 from parsers.csv_parser import parse_csv
 from parsers.excel_parser import parse_excel
+from repositories import ClassRepository
+from services.class_service import ClassService
 from services.codechef_service import get_cc_summary, get_latest_cc_contests
 from services.codeforces_service import get_cf_summary, get_latest_cf_contests
 from services.contest_scheduler import contest_scheduler
@@ -23,6 +27,32 @@ except Exception as _e:
 
 
 app = Flask(__name__)
+class_service = ClassService()
+student_service = StudentService()
+class_repo = ClassRepository()
+
+
+def _serialize_mongo(obj):
+    if isinstance(obj, list):
+        return [_serialize_mongo(i) for i in obj]
+    if isinstance(obj, dict):
+        res = {}
+        for k, v in obj.items():
+            if k == "_id" or isinstance(v, ObjectId):
+                res[k] = str(v)
+            elif isinstance(v, datetime):
+                res[k] = v.isoformat()
+            elif isinstance(v, (dict, list)):
+                res[k] = _serialize_mongo(v)
+            else:
+                res[k] = v
+        return res
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return obj
+
 
 
 cache_tables = {
@@ -517,11 +547,170 @@ def download():
     )
 
 
+@app.route("/dashboard", methods=["GET"])
+def dashboard():
+    classes = class_service.list_classes()
+    return render_template("dashboard.html", classes=_serialize_mongo(classes))
+
+
+@app.route("/class/<class_id>", methods=["GET"])
+def class_detail(class_id):
+    cls = class_service.get_class(class_id)
+    if not cls:
+        return render_template("index.html", error="Class not found."), 404
+    students, total = student_service.find_by_class(class_id, page_size=0)
+    return render_template("class_detail.html", class_data=_serialize_mongo(cls), students=_serialize_mongo(students))
+
+
+@app.route("/api/classes", methods=["GET"])
+def api_list_classes():
+    search = request.args.get("search", "")
+    archived = request.args.get("archived") == "true"
+    classes = class_service.list_classes(archived=archived, search=search)
+    return jsonify({"classes": _serialize_mongo(classes)})
+
+
+@app.route("/api/classes", methods=["POST"])
+def api_create_class():
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    if not data.get("className") or not data.get("department"):
+        return jsonify({"error": "className and department are required."}), 400
+    created = class_service.create_class(data)
+    return jsonify(_serialize_mongo(created)), 201
+
+
+@app.route("/api/classes/<class_id>", methods=["GET"])
+def api_get_class(class_id):
+    cls = class_service.get_class(class_id)
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    return jsonify(_serialize_mongo(cls))
+
+
+@app.route("/api/classes/<class_id>", methods=["PUT"])
+def api_update_class(class_id):
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    class_service.update_class(class_id, data)
+    updated_cls = class_service.get_class(class_id)
+    return jsonify({"status": "updated", "class": _serialize_mongo(updated_cls)})
+
+
+@app.route("/api/classes/<class_id>", methods=["DELETE"])
+def api_delete_class(class_id):
+    class_service.delete_class(class_id)
+    return jsonify({"status": "deleted", "classId": class_id})
+
+
+@app.route("/api/classes/<class_id>/students", methods=["GET"])
+def api_get_class_students(class_id):
+    search = request.args.get("search", "")
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("page_size", 0))
+    students, total = student_service.find_by_class(class_id, search=search, page=page, page_size=page_size)
+    return jsonify({"students": _serialize_mongo(students), "total": total})
+
+
+@app.route("/api/students", methods=["POST"])
+def api_add_student():
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    class_id = data.get("classId")
+    if not class_id:
+        return jsonify({"error": "classId is required"}), 400
+    if not data.get("studentName") and not data.get("name"):
+        return jsonify({"error": "studentName is required"}), 400
+    if not data.get("registerNo") and not data.get("register_no"):
+        return jsonify({"error": "registerNo is required"}), 400
+    res = student_service.add_single_student(class_id, data)
+    return jsonify(_serialize_mongo(res))
+
+
+@app.route("/api/students/<student_id>", methods=["PUT"])
+def api_edit_student(student_id):
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    student_service.edit_student(student_id, data)
+    return jsonify({"status": "updated"})
+
+
+
+@app.route("/api/students/<student_id>", methods=["DELETE"])
+def api_delete_student(student_id):
+    res = student_service.delete_student(student_id)
+    return jsonify(res)
+
+
+@app.route("/api/classes/<class_id>/import", methods=["POST"])
+def api_import_students(class_id):
+    file = request.files.get("file") or request.files.get("sheet")
+    if not file or not file.filename:
+        return jsonify({"error": "Please upload a CSV or Excel file"}), 400
+    filename = file.filename.lower()
+    file_type = "csv" if filename.endswith(".csv") else ("excel" if filename.endswith((".xlsx", ".xls")) else "")
+    if not file_type:
+        return jsonify({"error": "Unsupported file format. Please upload CSV or XLSX/XLS"}), 400
+    update_existing = (request.form.get("update_existing") == "true" or request.form.get("updateExisting") == "true" or request.args.get("update_existing") == "true")
+    try:
+        res = student_service.import_students_from_file(class_id, file, file_type, update_existing=update_existing)
+        toast_title = "Roster Imported Successfully 📋"
+        toast_msg = f"Imported: {res['inserted']} added, {res['updated']} updated, {res['skipped']} skipped."
+        notification_manager.send_notification(
+            user_id="default_user",
+            title=toast_title,
+            message=toast_msg,
+            n_type="import_complete"
+        )
+        return jsonify({"status": "success", "result": res, "toast": {"title": toast_title, "message": toast_msg}})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/classes/<class_id>/fetch", methods=["POST"])
+def api_class_fetch(class_id):
+    cls = class_service.get_class(class_id)
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    students, _ = student_service.find_by_class(class_id, page_size=0)
+    if not students:
+        return jsonify({"error": "No students found in class to fetch."}), 400
+    
+    data = request.get_json(silent=True) or {}
+    selected_platforms = data.get("platforms") or ["codeforces", "codechef", "leetcode"]
+    
+    rows = []
+    for st in students:
+        p_ids = st.get("platformIds") or {}
+        rows.append({
+            "name": st.get("studentName", ""),
+            "studentName": st.get("studentName", ""),
+            "register_no": st.get("registerNo", ""),
+            "registerNo": st.get("registerNo", ""),
+            "department": st.get("department", ""),
+            "codeforces": p_ids.get("codeforces") or st.get("codeforces", ""),
+            "codechef": p_ids.get("codechef") or st.get("codechef", ""),
+            "leetcode": p_ids.get("leetcode") or st.get("leetcode", ""),
+        })
+    
+    tables = _analyze_rows(rows, selected_platforms)
+    
+    global cache_tables
+    cache_tables = tables
+    
+    class_repo.touch_fetch_stats(class_id)
+    
+    toast_title = f"Fetch Completed for {cls.get('className', 'Class')} 🚀"
+    toast_msg = f"Evaluated stats for {len(rows)} student records across {', '.join([p.capitalize() for p in selected_platforms])}."
+    notification_manager.send_notification(
+        user_id="default_user",
+        title=toast_title,
+        message=toast_msg,
+        n_type="fetch_complete"
+    )
+    return jsonify({"status": "success", "tables": tables, "toast": {"title": toast_title, "message": toast_msg}})
+
+
 @app.route("/api/classes/<class_id>/students/export", methods=["GET"])
 def export_class_students(class_id):
     export_format = request.args.get("format", "xlsx").lower()
     platform_name = request.args.get("platform", "platstat").lower().strip()
-    student_service = StudentService()
     excel_stream = student_service.export_students_to_excel(class_id)
     if not excel_stream:
         return "No student records found.", 404
@@ -543,6 +732,7 @@ def export_class_students(class_id):
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
 
 
 @app.route("/topper", methods=["GET", "POST"])

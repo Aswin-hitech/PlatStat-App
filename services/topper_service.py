@@ -36,7 +36,23 @@ def filter_month(df, month):
     return df[df["Date"].dt.month == month]
 
 
+def _normalize_df_columns(df):
+    rename_dict = {}
+    for col in df.columns:
+        c_str = str(col).strip().lower().replace("_", " ").replace(".", "")
+        if c_str in ("name", "student name", "studentname", "name of student", "name of the student"):
+            rename_dict[col] = "Name of the Student"
+        elif c_str in ("date", "contest date", "fetch date"):
+            rename_dict[col] = "Date"
+        elif c_str in ("contest rating", "contestrating", "lc rating", "leetcode rating"):
+            rename_dict[col] = "Contest Rating"
+        elif c_str in ("current rating", "currentrating", "cf rating", "codeforces rating", "cc rating", "codechef rating", "rating"):
+            rename_dict[col] = "Current Rating"
+    return df.rename(columns=rename_dict)
+
+
 def clean_excel(df):
+    df = _normalize_df_columns(df)
     if "Name of the Student" in df.columns:
         return df.dropna(how="all").reset_index(drop=True)
 
@@ -45,11 +61,11 @@ def clean_excel(df):
 
     for i in range(len(df)):
         values = [str(x).strip() for x in df.iloc[i].values]
-        if all(h in values for h in expected_header):
+        if any("Name" in str(x) for x in values) and any("Date" in str(x) or "Rating" in str(x) for x in values):
             header_rows.append(i)
 
     if not header_rows:
-        return pd.DataFrame()
+        return df
 
     tables = []
     for idx, start in enumerate(header_rows):
@@ -57,9 +73,13 @@ def clean_excel(df):
         table = df.iloc[start:end].copy()
         table.columns = table.iloc[0]
         table = table[1:].dropna(how="all")
+        table = _normalize_df_columns(table)
         if "Name of the Student" in table.columns:
             table = table[table["Name of the Student"] != "Name of the Student"]
         tables.append(table)
+
+    if not tables:
+        return df
 
     return pd.concat(tables, ignore_index=True).reset_index(drop=True)
 
@@ -71,13 +91,28 @@ def compute_topper(df, platform, month):
         return pd.DataFrame()
 
     df = clean_excel(df)
+    df = _normalize_df_columns(df)
     df = filter_month(df, month)
-    if df.empty or "Name of the Student" not in df.columns or rating_column not in df.columns:
+
+    if df.empty or "Name of the Student" not in df.columns:
         return pd.DataFrame()
+
+    if rating_column not in df.columns:
+        # Fallback to any rating column present
+        candidates = [c for c in ("Contest Rating", "Current Rating", "Rating") if c in df.columns]
+        if candidates:
+            rating_column = candidates[0]
+        else:
+            return pd.DataFrame()
 
     df = df.copy()
     df[rating_column] = df[rating_column].apply(to_int)
     df = df.dropna(subset=["Name of the Student"])
+    # Filter out records where rating couldn't be parsed
+    df = df[df[rating_column].notna()]
+
+    if df.empty:
+        return pd.DataFrame()
 
     grouped = (
         df.groupby("Name of the Student", as_index=False)
@@ -86,3 +121,4 @@ def compute_topper(df, platform, month):
         .reset_index(drop=True)
     )
     return grouped
+
