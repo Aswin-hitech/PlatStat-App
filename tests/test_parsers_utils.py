@@ -70,3 +70,14 @@ def test_build_excel():
     assert isinstance(out, io.BytesIO)
     df_read = pd.read_excel(out)
     assert not df_read.empty
+
+
+def test_sanitize_sheet_title():
+    from app import _sanitize_sheet_title, _clean_row_dict
+    assert _sanitize_sheet_title("CF - Div 1 / Div 2: Special [Test]") == "CF - Div 1 _ Div 2_ Special"
+    assert _sanitize_sheet_title("") == "Sheet"
+
+    cleaned = _clean_row_dict({"Student Name": "John", "Rank": None, "Codeforces": "nan"})
+    assert cleaned["Student Name"] == "John"
+    assert cleaned["Rank"] == "AB"
+

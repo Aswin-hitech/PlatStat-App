@@ -43,13 +43,13 @@
 
             <div class="hero-actions">
                 {% if selected_platforms and selected_platforms|length == 1 %}
-                <a href="/download?platform={{ selected_platforms[0] }}&format=xlsx"><button type="button" class="btn-download-excel">📥 Export Excel (.xlsx)</button></a>
-                <a href="/download?platform={{ selected_platforms[0] }}&format=csv"><button class="btn-secondary" type="button">📄 Export CSV (.csv)</button></a>
+                <a href="/download?platform={{ selected_platforms[0] }}&format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export Excel (.xlsx)</a>
+                <a href="/download?platform={{ selected_platforms[0] }}&format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export CSV (.csv)</a>
                 {% else %}
-                <a href="/download?format=xlsx"><button type="button" class="btn-download-excel">📥 Export Excel (.xlsx)</button></a>
-                <a href="/download?format=csv"><button class="btn-secondary" type="button">📄 Export CSV (.csv)</button></a>
+                <a href="/download?format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export Excel (.xlsx)</a>
+                <a href="/download?format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export CSV (.csv)</a>
                 {% endif %}
-                <a href="/"><button class="btn-secondary" type="button">← Back to Analyzer</button></a>
+                <a href="/" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">← Back to Analyzer</a>
             </div>
 
             {% for title, contest_blocks in [("Codeforces", codeforces), ("CodeChef", codechef), ("LeetCode", leetcode)] %}

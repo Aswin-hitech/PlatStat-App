@@ -56,7 +56,8 @@
                     <button onclick="openAddStudentModal()" class="primary-button">➕ Add Student</button>
                     <button onclick="openImportStudentsModal()" class="secondary-button">📥 Import Roster</button>
                     <button onclick="startFetch('{{ class_data._id }}')" class="btn-sync" style="padding: 10px 18px;">⚡ Start Fetch</button>
-                    <button onclick="exportStudents('{{ class_data._id }}')" class="secondary-button">📊 Export Roster</button>
+                    <button onclick="exportStudents('{{ class_data._id }}', 'xlsx')" class="secondary-button">📥 Export Excel (.xlsx)</button>
+                    <button onclick="exportStudents('{{ class_data._id }}', 'csv')" class="secondary-button">📄 Export CSV (.csv)</button>
                     <button onclick="confirmDeleteClass('{{ class_data._id }}')" class="secondary-button delete-button" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;">🗑️ Delete Class</button>
                 </div>
             </div>
@@ -490,8 +491,8 @@
             }
         }
 
-        function exportStudents(classId) {
-            window.location.href = `/api/classes/${classId}/students/export`;
+        function exportStudents(classId, format = 'xlsx') {
+            window.location.href = `/api/classes/${classId}/students/export?format=${format}`;
         }
 
         function confirmDeleteStudent(studentId, classId) {

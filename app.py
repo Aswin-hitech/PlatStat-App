@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from io import BytesIO
 from bson import ObjectId
@@ -231,12 +232,26 @@ def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf
     return tables
 
 
+META_EXPORT_KEYS = {"s. no", "s.no", "student name", "name", "register no", "reg no", "reg_no", "register_no", "department", "dept", "section", "email", "platform"}
+
+
+def _sanitize_sheet_title(title):
+    """Sanitize worksheet titles by removing forbidden characters for openpyxl: \\ / ? * : [ ]"""
+    if not title:
+        return "Sheet"
+    cleaned = re.sub(r'[\\*?:/\[\]]', '_', str(title)).strip()[:28].strip()
+    return cleaned or "Sheet"
+
+
 def _clean_row_dict(row):
-    """Clean row dictionary to replace None/NaN with 'AB' or empty string and ensure numeric values don't turn into floats."""
+    """Clean row dictionary to replace None/NaN with 'AB' or empty string for metadata and ensure numeric values don't turn into floats."""
     cleaned = {}
     for k, v in row.items():
-        if v is None or v == "" or pd.isna(v):
-            cleaned[k] = "AB"
+        k_lower = str(k).strip().lower()
+        if v is None or pd.isna(v) or (isinstance(v, str) and v.strip().lower() in ("nan", "none", "null")):
+            cleaned[k] = "" if k_lower in META_EXPORT_KEYS else "AB"
+        elif v == "":
+            cleaned[k] = "" if k_lower in META_EXPORT_KEYS else "AB"
         elif isinstance(v, float) and v.is_integer():
             cleaned[k] = int(v)
         else:
@@ -331,7 +346,8 @@ def _tables_to_excel_stream(tables, requested_platform=None):
                 if not rows:
                     continue
 
-                base_name = f"{platform[:2].upper()} - {contest_title}"[:28]
+                safe_title = _sanitize_sheet_title(contest_title)
+                base_name = f"{platform[:2].upper()} - {safe_title}"[:28]
                 sheet_count[base_name] = sheet_count.get(base_name, 0) + 1
                 sheet_name = base_name if sheet_count[base_name] == 1 else f"{base_name[:25]} ({sheet_count[base_name]})"
 
@@ -718,13 +734,13 @@ def export_class_students(class_id):
     if export_format == "csv":
         df = pd.read_excel(excel_stream)
         csv_output = BytesIO()
-        csv_output.write(df.to_csv(index=False).encode("utf-8"))
+        csv_output.write(df.to_csv(index=False).encode("utf-8-sig"))
         csv_output.seek(0)
         return send_file(
             csv_output,
             as_attachment=True,
             download_name=filename,
-            mimetype="text/csv",
+            mimetype="text/csv; charset=utf-8",
         )
     return send_file(
         excel_stream,

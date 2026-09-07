@@ -88,6 +88,11 @@
         </div>
 
         {% if result %}
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 30px; flex-wrap: wrap;">
+            <button onclick="exportTopperTable('csv')" class="secondary-button" type="button">📄 Export Topper CSV (.csv)</button>
+            <button onclick="exportTopperTable('excel')" class="secondary-button" type="button">📥 Export Topper Excel (.xls)</button>
+        </div>
+
         {% if result.top5 is defined %}
         <div class="wide-card" style="margin-top:40px;">
             <h3 style="font-family:'Outfit', sans-serif; font-size:1.5rem; font-weight:800; color:var(--cyan-glow);">🏆 Top 5 Students</h3>
@@ -219,6 +224,37 @@
                     if (toast.parentElement) toast.parentElement.removeChild(toast);
                 }, 400);
             }
+        }
+
+        function exportTopperTable(format = 'csv') {
+            const tables = document.querySelectorAll('.wide-card table');
+            if (!tables.length) {
+                alert('No topper data available to export.');
+                return;
+            }
+            let csvLines = [];
+            tables.forEach((table) => {
+                const header = table.closest('.wide-card').querySelector('h3');
+                if (header) {
+                    csvLines.push(`"${header.textContent.trim()}"`);
+                }
+                const rows = table.querySelectorAll('tr');
+                rows.forEach(row => {
+                    const cols = row.querySelectorAll('th, td');
+                    const line = Array.from(cols).map(c => `"${c.textContent.replace(/"/g, '""').trim()}"`).join(',');
+                    csvLines.push(line);
+                });
+                csvLines.push('');
+            });
+            const csvContent = "\uFEFF" + csvLines.join('\n');
+            const blob = new Blob([csvContent], { type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/vnd.ms-excel' });
+            const link = document.createElement('a');
+            const ext = format === 'csv' ? 'csv' : 'xls';
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', `topper-rankings.${ext}`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         document.addEventListener('DOMContentLoaded', () => {
