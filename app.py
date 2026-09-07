@@ -1,4 +1,6 @@
 import re
+import os
+import json
 from datetime import datetime
 from io import BytesIO
 from bson import ObjectId
@@ -62,6 +64,38 @@ cache_tables = {
     "leetcode": [],
 }
 
+CACHE_FILE = os.path.join(app.root_path, "cache_tables.json")
+
+
+def _save_cache_tables(tables):
+    global cache_tables
+    cache_tables = tables
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(tables, f, default=str)
+    except Exception:
+        pass
+
+
+def _load_cache_tables():
+    global cache_tables
+    has_data = any(
+        any(b.get("rows") for b in cache_tables.get(key, []))
+        for key in ("codeforces", "codechef", "leetcode")
+    )
+    if has_data:
+        return cache_tables
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    cache_tables = loaded
+                    return cache_tables
+        except Exception:
+            pass
+    return cache_tables
+
 
 def _clean_text(value):
     if value is None:
@@ -71,7 +105,10 @@ def _clean_text(value):
             return ""
     except Exception:
         pass
-    return str(value).strip()
+    val_str = str(value).strip()
+    if val_str.lower() in ("nan", "none", "null"):
+        return ""
+    return val_str
 
 
 def _selected_platforms(form):
@@ -83,26 +120,49 @@ def _selected_platforms(form):
 
 
 def _row_value(row, *keys):
+    if not isinstance(row, dict):
+        return ""
+    # 1. Exact key match
     for key in keys:
-        value = _clean_text(row.get(key))
-        if value:
-            return value
+        if key in row:
+            value = _clean_text(row.get(key))
+            if value:
+                return value
+    # 2. Normalized key match (case-insensitive & stripped of special characters)
+    normalized_row = {
+        re.sub(r'[^a-z0-9]', '', str(k).lower()): v
+        for k, v in row.items()
+        if k is not None
+    }
+    for key in keys:
+        norm_key = re.sub(r'[^a-z0-9]', '', str(key).lower())
+        if norm_key in normalized_row:
+            value = _clean_text(normalized_row[norm_key])
+            if value:
+                return value
     return ""
 
 
 def _normalize_rows(rows):
     normalized = []
     for row in rows:
+        name = _row_value(row, "name", "studentName", "student_name", "student name", "student")
+        reg_no = _row_value(row, "register_no", "registerNo", "register_no", "reg_no", "regno", "register no", "reg no", "registration_no")
+        dept = _row_value(row, "department", "dept", "department_name")
+        cf = _row_value(row, "codeforces", "codeforces_id", "codeforcesId", "codeforces id", "codeforces handle", "cf", "cf_id", "cf_handle")
+        cc = _row_value(row, "codechef", "codechef_id", "codechefId", "codechef id", "codechef handle", "cc", "cc_id", "cc_handle")
+        lc = _row_value(row, "leetcode", "leetcode_id", "leetcodeId", "leetcode id", "leetcode handle", "lc", "lc_id", "lc_handle")
+
         normalized.append(
             {
-                "name": _row_value(row, "name", "studentName"),
-                "studentName": _row_value(row, "studentName", "name"),
-                "register_no": _row_value(row, "register_no", "registerNo"),
-                "registerNo": _row_value(row, "registerNo", "register_no"),
-                "department": _row_value(row, "department", "dept"),
-                "codeforces": _row_value(row, "codeforces"),
-                "codechef": _row_value(row, "codechef"),
-                "leetcode": _row_value(row, "leetcode"),
+                "name": name,
+                "studentName": name,
+                "register_no": reg_no,
+                "registerNo": reg_no,
+                "department": dept,
+                "codeforces": cf,
+                "codechef": cc,
+                "leetcode": lc,
             }
         )
     return normalized
@@ -487,8 +547,7 @@ def index():
 
     tables = _analyze_rows(rows, selected_platforms, lc_targets, cc_targets, cf_targets)
 
-    global cache_tables
-    cache_tables = tables
+    _save_cache_tables(tables)
 
     student_count = len(rows)
     platforms_str = ", ".join([p.capitalize() for p in selected_platforms])
@@ -521,29 +580,31 @@ def download():
     export_format = request.args.get("format", "xlsx").lower()
     requested_platform = request.args.get("platform", "").lower().strip()
 
+    tables = _load_cache_tables()
+
     has_data = any(
-        any(b.get("rows") for b in cache_tables.get(key, []))
+        any(b.get("rows") for b in tables.get(key, []))
         for key in ("codeforces", "codechef", "leetcode")
     )
     if not has_data:
         return "No data to download.", 404
 
-    active_platforms = [k for k, v in cache_tables.items() if v]
+    active_platforms = [k for k, v in tables.items() if v and any(b.get("rows") for b in v)]
 
-    if requested_platform and cache_tables.get(requested_platform):
+    if requested_platform and tables.get(requested_platform):
         platform_name = requested_platform
-        export_tables = {requested_platform: cache_tables[requested_platform]}
+        export_tables = {requested_platform: tables[requested_platform]}
     else:
         if len(active_platforms) == 1:
             platform_name = active_platforms[0]
         else:
             platform_name = requested_platform if requested_platform else "platstat"
-        export_tables = cache_tables
+        export_tables = tables
 
     filename = get_export_filename(platform_name=platform_name, extension=export_format)
 
     if export_format == "csv":
-        frame = _combined_export_frame(export_tables, requested_platform=requested_platform if requested_platform in cache_tables else None)
+        frame = _combined_export_frame(export_tables, requested_platform=requested_platform if requested_platform in tables else None)
         output = BytesIO()
         output.write(frame.to_csv(index=False).encode("utf-8-sig"))
         output.seek(0)
@@ -554,7 +615,7 @@ def download():
             mimetype="text/csv; charset=utf-8",
         )
 
-    excel_file = _tables_to_excel_stream(export_tables, requested_platform=requested_platform if requested_platform in cache_tables else None)
+    excel_file = _tables_to_excel_stream(export_tables, requested_platform=requested_platform if requested_platform in tables else None)
     return send_file(
         excel_file,
         as_attachment=True,
@@ -707,8 +768,7 @@ def api_class_fetch(class_id):
     
     tables = _analyze_rows(rows, selected_platforms)
     
-    global cache_tables
-    cache_tables = tables
+    _save_cache_tables(tables)
     
     class_repo.touch_fetch_stats(class_id)
     
