@@ -381,7 +381,7 @@ def _auto_fit_columns(worksheet):
 
 
 def _tables_to_excel_stream(tables, requested_platform=None):
-    """Build an Excel file stream with dedicated contest worksheets and styling."""
+    """Build an Excel file stream with dedicated contest & platform worksheets and styling."""
     output = BytesIO()
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -389,14 +389,25 @@ def _tables_to_excel_stream(tables, requested_platform=None):
 
         target_keys = [requested_platform] if (requested_platform and requested_platform in tables) else ["codeforces", "codechef", "leetcode"]
 
-        # Combined sheet first
+        # 1. Combined sheet first
         combined_frame = _combined_export_frame(tables, requested_platform=requested_platform)
         if not combined_frame.empty:
             combined_frame.to_excel(writer, sheet_name="Combined Results", index=False)
             ws_comb = writer.sheets["Combined Results"]
             _auto_fit_columns(ws_comb)
 
-        # Dedicated sheet per contest table
+        # 2. Dedicated platform sheets (Codeforces, CodeChef, LeetCode)
+        for platform in target_keys:
+            p_frame = _combined_export_frame(tables, requested_platform=platform)
+            if not p_frame.empty:
+                sheet_title = platform.capitalize()
+                if "Platform" in p_frame.columns:
+                    p_frame = p_frame.drop(columns=["Platform"])
+                p_frame.to_excel(writer, sheet_name=sheet_title, index=False)
+                ws_p = writer.sheets[sheet_title]
+                _auto_fit_columns(ws_p)
+
+        # 3. Dedicated sheet per contest table
         sheet_count = {}
         for platform in target_keys:
             contest_blocks = tables.get(platform, [])
@@ -410,6 +421,9 @@ def _tables_to_excel_stream(tables, requested_platform=None):
                 base_name = f"{platform[:2].upper()} - {safe_title}"[:28]
                 sheet_count[base_name] = sheet_count.get(base_name, 0) + 1
                 sheet_name = base_name if sheet_count[base_name] == 1 else f"{base_name[:25]} ({sheet_count[base_name]})"
+
+                if sheet_name in writer.sheets:
+                    sheet_name = f"{sheet_name} (Contest)"
 
                 cleaned_rows = [_clean_row_dict(r) for r in rows]
                 df = pd.DataFrame(cleaned_rows)
@@ -786,24 +800,52 @@ def api_class_fetch(class_id):
 @app.route("/api/classes/<class_id>/students/export", methods=["GET"])
 def export_class_students(class_id):
     export_format = request.args.get("format", "xlsx").lower()
-    platform_name = request.args.get("platform", "platstat").lower().strip()
-    excel_stream = student_service.export_students_to_excel(class_id)
-    if not excel_stream:
+    requested_platform = request.args.get("platform", "").lower().strip()
+
+    cls = class_service.get_class(class_id)
+    if not cls:
+        return "Class not found.", 404
+
+    students, _ = student_service.find_by_class(class_id, page_size=0)
+    if not students:
         return "No student records found.", 404
-    filename = get_export_filename(platform_name=platform_name, extension=export_format)
+
+    rows = []
+    for st in students:
+        p_ids = st.get("platformIds") or {}
+        rows.append({
+            "name": st.get("studentName", ""),
+            "studentName": st.get("studentName", ""),
+            "register_no": st.get("registerNo", ""),
+            "registerNo": st.get("registerNo", ""),
+            "department": st.get("department", ""),
+            "codeforces": p_ids.get("codeforces") or st.get("codeforces", ""),
+            "codechef": p_ids.get("codechef") or st.get("codechef", ""),
+            "leetcode": p_ids.get("leetcode") or st.get("leetcode", ""),
+        })
+
+    selected_platforms = [requested_platform] if (requested_platform in ("codeforces", "codechef", "leetcode")) else ["codeforces", "codechef", "leetcode"]
+    tables = _analyze_rows(rows, selected_platforms)
+    _save_cache_tables(tables)
+
+    export_name = requested_platform if requested_platform else (cls.get("className") or "class_roster")
+    filename = get_export_filename(platform_name=export_name, extension=export_format)
+
     if export_format == "csv":
-        df = pd.read_excel(excel_stream)
-        csv_output = BytesIO()
-        csv_output.write(df.to_csv(index=False).encode("utf-8-sig"))
-        csv_output.seek(0)
+        frame = _combined_export_frame(tables, requested_platform=requested_platform if requested_platform in tables else None)
+        output = BytesIO()
+        output.write(frame.to_csv(index=False).encode("utf-8-sig"))
+        output.seek(0)
         return send_file(
-            csv_output,
+            output,
             as_attachment=True,
             download_name=filename,
             mimetype="text/csv; charset=utf-8",
         )
+
+    excel_file = _tables_to_excel_stream(tables, requested_platform=requested_platform if requested_platform in tables else None)
     return send_file(
-        excel_stream,
+        excel_file,
         as_attachment=True,
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
