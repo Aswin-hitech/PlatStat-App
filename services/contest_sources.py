@@ -1,6 +1,7 @@
 import requests
 import logging
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import re
 
@@ -122,63 +123,81 @@ class AtCoderSource(BaseContestSource):
         return contests
 
 
-class CompeteAPISource(BaseContestSource):
-    """Aggregator source fetching contests for CodeChef, LeetCode, Codeforces, AtCoder."""
+class CodeChefSource(BaseContestSource):
+    """Fetch upcoming CodeChef contests via the official CodeChef contest list API."""
+
     def fetch_contests(self):
-        url = "https://kontests.net/api/v1/all"
         contests = []
         now_ts = int(time.time())
-        try:
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-            if resp.status_code == 200:
-                for c in resp.json():
-                    site = (c.get("site") or "").lower()
-                    platform = None
-                    if "codeforces" in site:
-                        platform = "codeforces"
-                    elif "codechef" in site:
-                        platform = "codechef"
-                    elif "leetcode" in site:
-                        platform = "leetcode"
-                    elif "atcoder" in site:
-                        platform = "atcoder"
-
-                    if not platform:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json, text/plain, */*",
+        }
+        # Fetch upcoming + present contests
+        for endpoint_type in ("future", "present"):
+            url = (
+                f"https://www.codechef.com/api/list/contests/all"
+                f"?sort_by=START&sorting_order=asc&offset=0&limit=30"
+                f"&category={endpoint_type}"
+            )
+            try:
+                resp = requests.get(url, headers=headers, timeout=10)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                contest_list = data.get(f"{endpoint_type}_contests") or []
+                for c in contest_list:
+                    name = (c.get("contest_name") or "").strip()
+                    code = (c.get("contest_code") or "").strip()
+                    if not name or not code:
                         continue
 
-                    title = c.get("name", "").strip()
-                    url_str = c.get("url", "")
-                    dur = int(float(c.get("duration") or 7200))
-                    
-                    st_str = c.get("start_time")
+                    # Parse start time
+                    start_iso = c.get("contest_start_date_iso") or c.get("contest_start_date") or ""
                     st_dt = None
-                    if st_str:
+                    if start_iso:
                         try:
-                            st_dt = datetime.fromisoformat(st_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                            st_dt = datetime.fromisoformat(
+                                start_iso.replace("Z", "+00:00")
+                            ).replace(tzinfo=None)
                         except Exception:
                             pass
 
                     if not st_dt:
                         continue
 
+                    # Parse duration
+                    end_iso = c.get("contest_end_date_iso") or c.get("contest_end_date") or ""
+                    dur = 10800  # default 3h
+                    if end_iso:
+                        try:
+                            end_dt = datetime.fromisoformat(
+                                end_iso.replace("Z", "+00:00")
+                            ).replace(tzinfo=None)
+                            dur = max(0, int((end_dt - st_dt).total_seconds()))
+                        except Exception:
+                            pass
+
                     st_ts = int(st_dt.timestamp())
-                    if st_ts + dur < now_ts:
+                    # Skip if ended more than 1 hour ago
+                    if st_ts + dur < now_ts - 3600:
                         continue
 
-                    ext_id = re.sub(r'[^a-zA-Z0-9_-]', '_', title.lower())
+                    ext_id = re.sub(r"[^a-zA-Z0-9_-]", "_", code.lower())
                     contests.append({
-                        "platform": platform,
+                        "platform": "codechef",
                         "externalId": ext_id,
-                        "contestId": f"{platform}_{ext_id}",
-                        "title": title,
+                        "contestId": f"codechef_{ext_id}",
+                        "title": name,
                         "startTime": st_dt,
                         "duration": dur,
-                        "url": url_str,
-                        "source": "compete_api",
-                        "status": "UPCOMING" if st_ts > now_ts else "CODING"
+                        "url": f"https://www.codechef.com/{code}",
+                        "source": "codechef_api",
+                        "status": "UPCOMING" if st_ts > now_ts else "CODING",
                     })
-        except Exception as e:
-            logger.warning("CompeteAPISource fetch error: %s", e)
+            except Exception as e:
+                logger.warning("CodeChefSource fetch error (%s): %s", endpoint_type, e)
+
         return contests
 
 
@@ -188,15 +207,46 @@ class ContestSourceAggregator:
             CodeforcesSource(),
             LeetCodeSource(),
             AtCoderSource(),
-            CompeteAPISource()
+            CodeChefSource(),
         ]
 
     def fetch_all(self):
+        """Fetch contests from all sources concurrently.
+
+        Each source runs in its own thread so a slow or timing-out source
+        cannot block the others.  Per-source timeout is capped at 15 s.
+        """
         all_contests = []
-        for source in self.sources:
-            try:
-                res = source.fetch_contests()
-                all_contests.extend(res)
-            except Exception as exc:
-                logger.error("Error in contest source %s: %s", source.__class__.__name__, exc)
+        source_timeout = 15  # seconds – safety cap per source
+
+        with ThreadPoolExecutor(max_workers=len(self.sources), thread_name_prefix="contest_src") as executor:
+            future_to_source = {
+                executor.submit(self._safe_fetch, src): src
+                for src in self.sources
+            }
+            for future in as_completed(future_to_source, timeout=source_timeout + 2):
+                src = future_to_source[future]
+                try:
+                    results = future.result(timeout=source_timeout)
+                    all_contests.extend(results)
+                except Exception as exc:
+                    logger.warning(
+                        "Contest source %s timed out or raised an error: %s",
+                        src.__class__.__name__,
+                        exc,
+                    )
+
         return all_contests
+
+    @staticmethod
+    def _safe_fetch(source):
+        """Wrapper that catches all exceptions from a source's fetch_contests."""
+        try:
+            return source.fetch_contests()
+        except Exception as exc:
+            logger.error(
+                "Unhandled error in %s.fetch_contests: %s",
+                source.__class__.__name__,
+                exc,
+            )
+            return []
