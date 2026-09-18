@@ -308,7 +308,11 @@ def _clean_row_dict(row):
     cleaned = {}
     for k, v in row.items():
         k_lower = str(k).strip().lower()
-        if v is None or pd.isna(v) or (isinstance(v, str) and v.strip().lower() in ("nan", "none", "null")):
+        try:
+            _is_na = v is None or pd.isna(v)
+        except (ValueError, TypeError):
+            _is_na = False
+        if _is_na or (isinstance(v, str) and v.strip().lower() in ("nan", "none", "null")):
             cleaned[k] = "" if k_lower in META_EXPORT_KEYS else "AB"
         elif v == "":
             cleaned[k] = "" if k_lower in META_EXPORT_KEYS else "AB"
@@ -386,29 +390,48 @@ def _tables_to_excel_stream(tables, requested_platform=None):
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         workbook = writer.book
+        used_sheet_names = set()
+
+        def _unique_sheet_name(candidate):
+            """Return a unique sheet name within 31 chars (Excel limit)."""
+            candidate = candidate[:31]
+            if candidate not in used_sheet_names:
+                used_sheet_names.add(candidate)
+                return candidate
+            for i in range(2, 1000):
+                suffix = f" ({i})"
+                trimmed = candidate[:31 - len(suffix)] + suffix
+                if trimmed not in used_sheet_names:
+                    used_sheet_names.add(trimmed)
+                    return trimmed
+            return candidate  # fallback (should never reach)
 
         target_keys = [requested_platform] if (requested_platform and requested_platform in tables) else ["codeforces", "codechef", "leetcode"]
 
         # 1. Combined sheet first
         combined_frame = _combined_export_frame(tables, requested_platform=requested_platform)
         if not combined_frame.empty:
-            combined_frame.to_excel(writer, sheet_name="Combined Results", index=False)
-            ws_comb = writer.sheets["Combined Results"]
-            _auto_fit_columns(ws_comb)
+            sheet_name = _unique_sheet_name("Combined Results")
+            combined_frame.to_excel(writer, sheet_name=sheet_name, index=False)
+            try:
+                _auto_fit_columns(writer.sheets[sheet_name])
+            except Exception:
+                pass
 
         # 2. Dedicated platform sheets (Codeforces, CodeChef, LeetCode)
         for platform in target_keys:
             p_frame = _combined_export_frame(tables, requested_platform=platform)
             if not p_frame.empty:
-                sheet_title = platform.capitalize()
                 if "Platform" in p_frame.columns:
                     p_frame = p_frame.drop(columns=["Platform"])
-                p_frame.to_excel(writer, sheet_name=sheet_title, index=False)
-                ws_p = writer.sheets[sheet_title]
-                _auto_fit_columns(ws_p)
+                sheet_name = _unique_sheet_name(platform.capitalize())
+                p_frame.to_excel(writer, sheet_name=sheet_name, index=False)
+                try:
+                    _auto_fit_columns(writer.sheets[sheet_name])
+                except Exception:
+                    pass
 
         # 3. Dedicated sheet per contest table
-        sheet_count = {}
         for platform in target_keys:
             contest_blocks = tables.get(platform, [])
             for block in contest_blocks:
@@ -418,24 +441,28 @@ def _tables_to_excel_stream(tables, requested_platform=None):
                     continue
 
                 safe_title = _sanitize_sheet_title(contest_title)
-                base_name = f"{platform[:2].upper()} - {safe_title}"[:28]
-                sheet_count[base_name] = sheet_count.get(base_name, 0) + 1
-                sheet_name = base_name if sheet_count[base_name] == 1 else f"{base_name[:25]} ({sheet_count[base_name]})"
-
-                if sheet_name in writer.sheets:
-                    sheet_name = f"{sheet_name} (Contest)"
+                candidate = f"{platform[:2].upper()} - {safe_title}"
+                sheet_name = _unique_sheet_name(candidate)
 
                 cleaned_rows = [_clean_row_dict(r) for r in rows]
                 df = pd.DataFrame(cleaned_rows)
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
-                ws = writer.sheets[sheet_name]
-                _auto_fit_columns(ws)
+                try:
+                    _auto_fit_columns(writer.sheets[sheet_name])
+                except Exception:
+                    pass
 
+        # Ensure there is at least one sheet so openpyxl doesn't write a corrupt file
+        if not workbook.sheetnames:
+            workbook.create_sheet("Results")
+
+        # Remove the default empty 'Sheet' if more sheets exist
         if "Sheet" in workbook.sheetnames and len(workbook.sheetnames) > 1:
             del workbook["Sheet"]
 
     output.seek(0)
     return output
+
 
 
 @app.route("/favicon.ico")
@@ -619,23 +646,30 @@ def download():
 
     if export_format == "csv":
         frame = _combined_export_frame(export_tables, requested_platform=requested_platform if requested_platform in tables else None)
-        output = BytesIO()
-        output.write(frame.to_csv(index=False).encode("utf-8-sig"))
+        csv_bytes = frame.to_csv(index=False).encode("utf-8-sig")
+        output = BytesIO(csv_bytes)
         output.seek(0)
-        return send_file(
+        response = send_file(
             output,
             as_attachment=True,
             download_name=filename,
-            mimetype="text/csv; charset=utf-8",
+            mimetype="text/csv",
         )
+        response.headers["Content-Type"] = "text/csv; charset=utf-8"
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
 
     excel_file = _tables_to_excel_stream(export_tables, requested_platform=requested_platform if requested_platform in tables else None)
-    return send_file(
+    response = send_file(
         excel_file,
         as_attachment=True,
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.route("/dashboard", methods=["GET"])
@@ -833,23 +867,30 @@ def export_class_students(class_id):
 
     if export_format == "csv":
         frame = _combined_export_frame(tables, requested_platform=requested_platform if requested_platform in tables else None)
-        output = BytesIO()
-        output.write(frame.to_csv(index=False).encode("utf-8-sig"))
+        csv_bytes = frame.to_csv(index=False).encode("utf-8-sig")
+        output = BytesIO(csv_bytes)
         output.seek(0)
-        return send_file(
+        response = send_file(
             output,
             as_attachment=True,
             download_name=filename,
-            mimetype="text/csv; charset=utf-8",
+            mimetype="text/csv",
         )
+        response.headers["Content-Type"] = "text/csv; charset=utf-8"
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
 
     excel_file = _tables_to_excel_stream(tables, requested_platform=requested_platform if requested_platform in tables else None)
-    return send_file(
+    response = send_file(
         excel_file,
         as_attachment=True,
         download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 
