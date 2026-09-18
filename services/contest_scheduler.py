@@ -8,6 +8,8 @@ from services.notification_service import notification_manager
 
 logger = logging.getLogger("platstat.scheduler")
 
+import os
+
 reminder_repo = ReminderRepository()
 contest_repo = ContestRepository()
 
@@ -27,6 +29,10 @@ class ContestScheduler:
 
     def start(self):
         if self._running:
+            return
+        # In serverless environments like Vercel, persistent threads cause resource contention and invocation timeouts
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            logger.info("Serverless environment detected (VERCEL); background ContestScheduler loop will not start.")
             return
         self._running = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True)

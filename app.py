@@ -8,6 +8,8 @@ from bson import ObjectId
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from parsers.csv_parser import parse_csv
 from parsers.excel_parser import parse_excel
 from repositories import ClassRepository
@@ -20,13 +22,14 @@ from services.leetcode_service import find_latest_lc_contest, get_lc_summary, ge
 from services.notification_service import notification_manager
 from services.student_service import StudentService
 from services.topper_service import compute_topper
-from utils.date_utils import get_export_filename
+from utils.date_utils import get_export_filename, today_ddmmyyyy
 from utils.excel_utils import create_excel_file
 
-try:
-    contest_scheduler.start()
-except Exception as _e:
-    pass
+if not (os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")):
+    try:
+        contest_scheduler.start()
+    except Exception as _e:
+        pass
 
 
 app = Flask(__name__)
@@ -219,74 +222,143 @@ def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf
     if "codeforces" in selected_platforms and not cf_targets:
         cf_targets = [{"title": None, "id": None, "date": None}]
 
+    max_workers = 10
+
     if "codeforces" in selected_platforms:
         for cf_t in (cf_targets or [{"title": None, "id": None, "date": None}]):
             c_title = cf_t.get("title") or (str(cf_t.get("id")) if cf_t.get("id") else "General Summary")
-            c_rows = []
-            c_idx = 1
+            eligible = []
             for row in rows:
                 name = _clean_text(row.get("name") or row.get("studentName"))
                 regno = _clean_text(row.get("register_no") or row.get("registerNo"))
                 dept = _clean_text(row.get("department"))
-                if not name:
-                    continue
                 handle = _clean_text(row.get("codeforces"))
-                if handle:
-                    c_rows.append(
-                        get_cf_summary(
-                            c_idx, name, regno, dept, handle,
-                            target_contest_id=cf_t.get("id"),
-                            target_contest_date=cf_t.get("date"),
-                            target_contest_title=cf_t.get("title")
-                        )
+                if name and handle:
+                    eligible.append((name, regno, dept, handle))
+
+            c_rows = [None] * len(eligible)
+
+            def _fetch_cf(idx, item):
+                n, r, d, h = item
+                try:
+                    return idx, get_cf_summary(
+                        idx + 1, n, r, d, h,
+                        target_contest_id=cf_t.get("id"),
+                        target_contest_date=cf_t.get("date"),
+                        target_contest_title=cf_t.get("title")
                     )
-                    c_idx += 1
+                except Exception:
+                    from services.codeforces_service import ab_row, format_contest_date
+                    out_d = format_contest_date(cf_t.get("date")) if cf_t.get("date") else today_ddmmyyyy()
+                    return idx, ab_row(idx + 1, n, r, d, out_d, cf_t.get("title"))
+
+            if eligible:
+                workers = min(max_workers, len(eligible))
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = [pool.submit(_fetch_cf, i, item) for i, item in enumerate(eligible)]
+                    for fut in as_completed(futures):
+                        try:
+                            idx, row_res = fut.result()
+                            c_rows[idx] = row_res
+                        except Exception:
+                            pass
+            c_rows = [r for r in c_rows if r is not None]
             tables["codeforces"].append({"contest": c_title, "date": cf_t.get("date"), "rows": c_rows})
 
     if "codechef" in selected_platforms:
         for cc_t in (cc_targets or [{"title": None, "date": None}]):
             c_title = cc_t.get("title") or "General Summary"
-            c_rows = []
-            c_idx = 1
+            eligible = []
             for row in rows:
                 name = _clean_text(row.get("name") or row.get("studentName"))
                 regno = _clean_text(row.get("register_no") or row.get("registerNo"))
                 dept = _clean_text(row.get("department"))
-                if not name:
-                    continue
                 handle = _clean_text(row.get("codechef"))
-                if handle:
-                    c_rows.append(
-                        get_cc_summary(
-                            c_idx, name, regno, dept, handle,
-                            target_contest_title=cc_t.get("title"),
-                            target_contest_date=cc_t.get("date")
-                        )
+                if name and handle:
+                    eligible.append((name, regno, dept, handle))
+
+            c_rows = [None] * len(eligible)
+
+            def _fetch_cc(idx, item):
+                n, r, d, h = item
+                try:
+                    return idx, get_cc_summary(
+                        idx + 1, n, r, d, h,
+                        target_contest_title=cc_t.get("title"),
+                        target_contest_date=cc_t.get("date")
                     )
-                    c_idx += 1
+                except Exception:
+                    from utils.date_utils import today_ddmmyyyy
+                    from services.codechef_service import format_contest_date
+                    out_d = format_contest_date(cc_t.get("date")) if cc_t.get("date") else today_ddmmyyyy()
+                    return idx, {
+                        "S. No": idx + 1,
+                        "Name of the Student": n,
+                        "Register No": r,
+                        "Dept": d,
+                        "Target Contest": cc_t.get("title") or "N/A",
+                        "Date": out_d,
+                        "Current Rating": "AB",
+                        "Highest Rating": "AB",
+                        "Division": "AB",
+                        "Star Rating": "AB",
+                        "Global Rank": "AB",
+                        "Country Ranking": "AB",
+                        "Contest participated": "AB",
+                        "Problems Solved": "AB",
+                        "Target Contest Solved": "AB",
+                    }
+
+            if eligible:
+                workers = min(max_workers, len(eligible))
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = [pool.submit(_fetch_cc, i, item) for i, item in enumerate(eligible)]
+                    for fut in as_completed(futures):
+                        try:
+                            idx, row_res = fut.result()
+                            c_rows[idx] = row_res
+                        except Exception:
+                            pass
+            c_rows = [r for r in c_rows if r is not None]
             tables["codechef"].append({"contest": c_title, "date": cc_t.get("date"), "rows": c_rows})
 
     if "leetcode" in selected_platforms:
         for lc_t in (lc_targets or [{"title": None, "startTime": None}]):
             c_title = lc_t.get("title") or "General Summary"
-            c_rows = []
-            c_idx = 1
+            eligible = []
             for row in rows:
                 name = _clean_text(row.get("name") or row.get("studentName"))
                 regno = _clean_text(row.get("register_no") or row.get("registerNo"))
                 dept = _clean_text(row.get("department"))
-                if not name:
-                    continue
                 handle = _clean_text(row.get("leetcode"))
-                if handle:
-                    c_rows.append(
-                        get_lc_summary(
-                            c_idx, name, regno, dept, handle,
-                            lc_t.get("title"),
-                            lc_t.get("startTime")
-                        )
+                if name and handle:
+                    eligible.append((name, regno, dept, handle))
+
+            c_rows = [None] * len(eligible)
+
+            def _fetch_lc(idx, item):
+                n, r, d, h = item
+                try:
+                    return idx, get_lc_summary(
+                        idx + 1, n, r, d, h,
+                        lc_t.get("title"),
+                        lc_t.get("startTime")
                     )
-                    c_idx += 1
+                except Exception:
+                    from services.leetcode_service import ab_row
+                    return idx, ab_row(idx + 1, n, r, d, lc_t.get("title"))
+
+            if eligible:
+                workers = min(max_workers, len(eligible))
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = [pool.submit(_fetch_lc, i, item) for i, item in enumerate(eligible)]
+                    for fut in as_completed(futures):
+                        try:
+                            idx, row_res = fut.result()
+                            c_rows[idx] = row_res
+                        except Exception:
+                            pass
+            c_rows = [r for r in c_rows if r is not None]
             tables["leetcode"].append({"contest": c_title, "rows": c_rows})
 
     return tables
@@ -996,10 +1068,10 @@ def get_contests():
     return jsonify({"contests": items, "total": total, "page": page, "pageSize": page_size})
 
 
-@app.route("/api/contests/sync", methods=["POST"])
+@app.route("/api/contests/sync", methods=["GET", "POST"])
 def sync_contests():
     res = contest_service.sync_contests()
-    synced_cnt = res.get("syncedCount", 0) if isinstance(res, dict) else 0
+    synced_cnt = res.get("synced", res.get("syncedCount", 0)) if isinstance(res, dict) else 0
     toast_title = "Contest Sync Completed 🔄"
     toast_msg = f"Synced latest competitive programming contests ({synced_cnt} active/upcoming)."
     notification_manager.send_notification(

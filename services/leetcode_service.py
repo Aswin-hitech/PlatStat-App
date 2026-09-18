@@ -4,8 +4,12 @@ from datetime import datetime
 import re
 
 
+_LC_CONTESTS_CACHE = {"data": None, "timestamp": 0}
+_CACHE_TTL_SECONDS = 300
+
+
 def get_latest_lc_contests(limit=6):
-    """Fetch the latest `limit` past LeetCode contests from the LeetCode GraphQL API.
+    """Fetch the latest `limit` past LeetCode contests from the LeetCode GraphQL API with 5-min caching.
 
     Returns a list of dicts:
     [
@@ -18,6 +22,10 @@ def get_latest_lc_contests(limit=6):
         ...
     ]
     """
+    now = int(time.time())
+    if _LC_CONTESTS_CACHE["data"] and (now - _LC_CONTESTS_CACHE["timestamp"] < _CACHE_TTL_SECONDS):
+        return _LC_CONTESTS_CACHE["data"][:limit]
+
     url = "https://leetcode.com/graphql"
     query = {
         "query": """
@@ -33,19 +41,20 @@ def get_latest_lc_contests(limit=6):
     headers = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 
     try:
-        response = requests.post(url, json=query, headers=headers, timeout=10)
+        response = requests.post(url, json=query, headers=headers, timeout=8)
         if response.status_code != 200:
+            if _LC_CONTESTS_CACHE["data"]:
+                return _LC_CONTESTS_CACHE["data"][:limit]
             raise RuntimeError(f"LeetCode API HTTP error {response.status_code}")
 
         data = response.json().get("data") or {}
         contests = data.get("allContests") or []
 
-        now = int(time.time())
         past_contests = [c for c in contests if c.get("startTime") and c["startTime"] <= now]
         past_contests.sort(key=lambda c: c["startTime"], reverse=True)
 
         result = []
-        for c in past_contests[:limit]:
+        for c in past_contests[:max(limit, 15)]:
             st = c["startTime"]
             dt_str = datetime.fromtimestamp(st).strftime("%Y-%m-%d")
             result.append({
@@ -55,10 +64,14 @@ def get_latest_lc_contests(limit=6):
                 "date": dt_str
             })
 
-        return result
+        _LC_CONTESTS_CACHE["data"] = result
+        _LC_CONTESTS_CACHE["timestamp"] = now
+        return result[:limit]
 
     except Exception as e:
         print("Error fetching LeetCode contests:", e)
+        if _LC_CONTESTS_CACHE["data"]:
+            return _LC_CONTESTS_CACHE["data"][:limit]
         raise e
 
 
@@ -99,19 +112,28 @@ def split_by_contest_total(n):
 
 
 def find_latest_lc_contest(rows):
-    """Find the most recent LeetCode contest that any student in `rows` participated in.
-
-    Returns (title, start_time) for the globally latest contest, or (None, 0) if
-    none could be determined. This is computed once per batch so every student's
-    contest participation is checked against the same reference contest.
+    """Find the most recent LeetCode contest.
+    First checks official LeetCode recent contest list (fast, 1 call).
+    Falls back to inspecting at most 2 students' history if needed.
     """
+    try:
+        contests = get_latest_lc_contests(limit=1)
+        if contests and contests[0].get("title"):
+            return contests[0]["title"], contests[0].get("startTime", 0)
+    except Exception:
+        pass
+
     latest_title = None
     latest_time = 0
+    checked = 0
 
     for row in rows:
         username = (row.get("leetcode") or "").strip()
         if not username:
             continue
+        checked += 1
+        if checked > 2:
+            break
 
         query = {
             "query": """
@@ -130,13 +152,13 @@ def find_latest_lc_contest(rows):
                 "https://leetcode.com/graphql",
                 json=query,
                 headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10
-            ).json()["data"]
+                timeout=6
+            ).json().get("data") or {}
 
             hist = data.get("userContestRankingHistory") or []
 
             for h in hist:
-                if h["contest"]["startTime"] and h["contest"]["startTime"] > latest_time:
+                if h.get("contest", {}).get("startTime") and h["contest"]["startTime"] > latest_time:
                     latest_time = h["contest"]["startTime"]
                     latest_title = h["contest"]["title"]
 
@@ -175,8 +197,8 @@ def get_lc_summary(sn, name, regno, dept, user, latest_contest_title=None, lates
             "https://leetcode.com/graphql",
             json=query,
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15
-        ).json()["data"]
+            timeout=8
+        ).json().get("data") or {}
 
         mu = data["matchedUser"]
         if not mu:

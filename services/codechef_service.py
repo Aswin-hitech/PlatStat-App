@@ -55,8 +55,17 @@ def format_contest_date(dt_str):
     return dt_str
 
 
+_CC_CONTESTS_CACHE = {"data": None, "timestamp": 0}
+_CC_CACHE_TTL_SECONDS = 300
+_CC_SESSION = requests.Session()
+
+
 def get_latest_cc_contests(limit=6):
-    """Fetch the latest past CodeChef contests (Starters and Monday Munch only) with title, code, and dates."""
+    """Fetch the latest past CodeChef contests (Starters and Monday Munch only) with 5-min caching."""
+    now = int(time.time())
+    if _CC_CONTESTS_CACHE["data"] and (now - _CC_CONTESTS_CACHE["timestamp"] < _CC_CACHE_TTL_SECONDS):
+        return _CC_CONTESTS_CACHE["data"][:limit]
+
     url = "https://www.codechef.com/api/list/contests/all?sort_by=END&sorting_order=desc&offset=0&limit=60"
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -64,8 +73,10 @@ def get_latest_cc_contests(limit=6):
     }
 
     try:
-        r = requests.get(url, headers=headers, timeout=12)
+        r = _CC_SESSION.get(url, headers=headers, timeout=8)
         if r.status_code != 200:
+            if _CC_CONTESTS_CACHE["data"]:
+                return _CC_CONTESTS_CACHE["data"][:limit]
             return []
         data = r.json()
         past = data.get("past_contests") or []
@@ -89,32 +100,36 @@ def get_latest_cc_contests(limit=6):
                     "code": code,
                     "date": dt_str
                 })
-                if len(result) >= limit:
+                if len(result) >= max(limit, 15):
                     break
 
-        return result
+        _CC_CONTESTS_CACHE["data"] = result
+        _CC_CONTESTS_CACHE["timestamp"] = now
+        return result[:limit]
     except Exception as e:
         print("Error fetching CodeChef contests:", e)
+        if _CC_CONTESTS_CACHE["data"]:
+            return _CC_CONTESTS_CACHE["data"][:limit]
         return []
 
 
-def fetch_codechef_profile(user, max_retries=3):
-    """Fetch CodeChef profile HTML with session retries and exponential backoff for HTTP 429."""
+def fetch_codechef_profile(user, max_retries=2):
+    """Fetch CodeChef profile HTML with session retries and fast backoff."""
     url = f"https://www.codechef.com/users/{user}"
-    session = requests.Session()
 
     for attempt in range(max_retries):
         try:
-            r = session.get(url, headers=get_headers(), timeout=15)
+            r = _CC_SESSION.get(url, headers=get_headers(), timeout=8)
             if r.status_code == 200:
                 return r.text
             elif r.status_code == 429:
-                wait = (attempt + 1) * 2 + random.uniform(0.5, 1.5)
+                wait = min(1.5, (attempt + 1) * 0.75 + random.uniform(0.1, 0.5))
                 time.sleep(wait)
             elif r.status_code in (404, 403):
                 return None
-        except Exception as err:
-            time.sleep(attempt + 1)
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
 
     return None
 

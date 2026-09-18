@@ -13,16 +13,31 @@ def format_contest_date(dt_str):
     return dt_str
 
 
+import time
+
+_CF_CONTESTS_CACHE = {"data": None, "timestamp": 0}
+_CF_CACHE_TTL_SECONDS = 300
+_CF_SESSION = requests.Session()
+
+
 def get_latest_cf_contests(limit=6):
-    """Fetch the latest finished Codeforces contests with title, id, code, and date."""
+    """Fetch the latest finished Codeforces contests with title, id, code, and date (5-min caching)."""
+    now = int(time.time())
+    if _CF_CONTESTS_CACHE["data"] and (now - _CF_CONTESTS_CACHE["timestamp"] < _CF_CACHE_TTL_SECONDS):
+        return _CF_CONTESTS_CACHE["data"][:limit]
+
     url = "https://codeforces.com/api/contest.list?gym=false"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        r = requests.get(url, headers=headers, timeout=12)
+        r = _CF_SESSION.get(url, headers=headers, timeout=8)
         if r.status_code != 200:
+            if _CF_CONTESTS_CACHE["data"]:
+                return _CF_CONTESTS_CACHE["data"][:limit]
             return []
         data = r.json()
         if data.get("status") != "OK":
+            if _CF_CONTESTS_CACHE["data"]:
+                return _CF_CONTESTS_CACHE["data"][:limit]
             return []
 
         finished = [c for c in data.get("result", []) if c.get("phase") == "FINISHED"]
@@ -39,11 +54,16 @@ def get_latest_cf_contests(limit=6):
                     "code": str(cid),
                     "date": dt_str
                 })
-                if len(result) >= limit:
+                if len(result) >= max(limit, 15):
                     break
-        return result
+
+        _CF_CONTESTS_CACHE["data"] = result
+        _CF_CONTESTS_CACHE["timestamp"] = now
+        return result[:limit]
     except Exception as e:
         print("Error fetching Codeforces contests:", e)
+        if _CF_CONTESTS_CACHE["data"]:
+            return _CF_CONTESTS_CACHE["data"][:limit]
         return []
 
 
@@ -69,10 +89,10 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
     c_title = target_contest_title or (str(target_contest_id) if target_contest_id else "N/A")
 
     try:
-        info = requests.get(
+        info = _CF_SESSION.get(
             f"https://codeforces.com/api/user.info?handles={handle}",
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15
+            timeout=8
         ).json()
 
         if info.get("status") != "OK":
@@ -80,10 +100,10 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
 
         user = info["result"][0]
 
-        subs = requests.get(
+        subs = _CF_SESSION.get(
             f"https://codeforces.com/api/user.status?handle={handle}",
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15
+            timeout=8
         ).json()
 
         if subs.get("status") != "OK":
@@ -111,10 +131,10 @@ def get_cf_summary(sn, name, regno, dept, handle, target_contest_id=None, target
         # Historical rating & contest rank extraction
         if target_contest_id:
             try:
-                r_rat = requests.get(
+                r_rat = _CF_SESSION.get(
                     f"https://codeforces.com/api/user.rating?handle={handle}",
                     headers={"User-Agent": "Mozilla/5.0"},
-                    timeout=10
+                    timeout=6
                 ).json()
                 if r_rat.get("status") == "OK":
                     for item in r_rat.get("result", []):
