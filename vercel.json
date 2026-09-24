@@ -3,6 +3,10 @@
     "api/index.py": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "api/contests/sync.py": {
+      "maxDuration": 60,
+      "memory": 512
     }
   },
   "rewrites": [
@@ -14,7 +18,7 @@
   "crons": [
     {
       "path": "/api/contests/sync",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
