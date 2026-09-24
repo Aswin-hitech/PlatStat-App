@@ -218,6 +218,27 @@ def _normalize_rows(rows):
 
 
 def _rows_from_form(form):
+    # Multi-student "few" mode: fields named ms_name_0, ms_name_1, …
+    ms_rows = []
+    for i in range(5):
+        name = _clean_text(form.get(f"ms_name_{i}"))
+        reg_no = _clean_text(form.get(f"ms_register_no_{i}"))
+        if not name and not reg_no:
+            continue
+        ms_rows.append({
+            "name": name,
+            "studentName": name,
+            "register_no": reg_no,
+            "registerNo": reg_no,
+            "department": _clean_text(form.get(f"ms_department_{i}")),
+            "codeforces": _clean_text(form.get(f"ms_codeforces_{i}")),
+            "codechef": _clean_text(form.get(f"ms_codechef_{i}")),
+            "leetcode": _clean_text(form.get(f"ms_leetcode_{i}")),
+        })
+    if ms_rows:
+        return ms_rows
+
+    # Single student mode
     row = {
         "name": _clean_text(form.get("name")),
         "studentName": _clean_text(form.get("name")),

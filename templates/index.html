@@ -182,6 +182,7 @@
                     <!-- Segmented Control Tab Switcher -->
                     <div class="segmented-control">
                         <button type="button" class="tab-button active" id="tab_btn_single" onclick="switchTab('single')">Single Student</button>
+                        <button type="button" class="tab-button" id="tab_btn_few" onclick="switchTab('few')">Few Students</button>
                         <button type="button" class="tab-button" id="tab_btn_bulk" onclick="switchTab('bulk')">Bulk CSV / Excel</button>
                     </div>
 
@@ -215,8 +216,82 @@
                         </div>
                     </div>
 
-                    <!-- Tab 2: Bulk Upload Dropzone -->
+                    <!-- Tab 2: Few Students (2–5 manual rows) -->
+                    <div id="tab_few_content" style="display: none;">
+
+                        <div class="few-students-header">
+                            <span class="few-students-hint">Add up to 5 students manually</span>
+                            <span class="few-students-count" id="few_count_badge">1 student</span>
+                        </div>
+
+                        <div id="few_students_list">
+                            <!-- rows injected by JS -->
+                        </div>
+
+                        <div class="few-students-actions">
+                            <button type="button" class="btn-add-student" id="btn_add_student" onclick="addFewStudentRow()">
+                                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="width:15px;height:15px;flex-shrink:0;"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+                                Add Another Student
+                            </button>
+                            <span class="few-max-hint" id="few_max_hint" style="display:none;">Maximum 5 students reached — use Bulk CSV for more</span>
+                        </div>
+
+                    </div>
+
+                    <!-- Tab 3: Bulk Upload Dropzone -->
                     <div id="tab_bulk_content" style="display: none;">
+
+                        <!-- Format info bar -->
+                        <div class="bulk-info-bar">
+                            <button type="button" class="bulk-info-trigger" id="bulk_info_btn" onclick="toggleCsvFormatPanel()" title="View required CSV format">
+                                <svg class="bulk-info-icon" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="9" stroke="currentColor" stroke-width="1.6" fill="none"/><rect x="9.2" y="8.5" width="1.6" height="5.5" rx="0.8"/><circle cx="10" cy="6.5" r="0.9"/></svg>
+                                <span>Required column format</span>
+                            </button>
+                            <a href="{{ url_for('static', filename='sample_students.csv') }}" download="sample_students.csv" class="bulk-sample-btn" onclick="event.stopPropagation()">
+                                <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="width:13px;height:13px;flex-shrink:0;"><path d="M10 2a1 1 0 011 1v8.586l2.293-2.293a1 1 0 011.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L9 11.586V3a1 1 0 011-1z"/><path d="M3 15a1 1 0 011-1h12a1 1 0 010 2H4a1 1 0 01-1-1z"/></svg>
+                                Download Sample CSV
+                            </a>
+                        </div>
+
+                        <!-- Collapsible format panel -->
+                        <div class="csv-format-panel" id="csv_format_panel">
+                            <div class="csv-format-inner">
+                            <div class="csv-format-title">Required CSV / Excel Column Headers</div>
+                            <div class="csv-columns-grid">
+                                <div class="csv-col-item required">
+                                    <span class="csv-col-name">name</span>
+                                    <span class="csv-col-desc">Student full name</span>
+                                </div>
+                                <div class="csv-col-item required">
+                                    <span class="csv-col-name">register_no</span>
+                                    <span class="csv-col-desc">Registration / roll number</span>
+                                </div>
+                                <div class="csv-col-item required">
+                                    <span class="csv-col-name">department</span>
+                                    <span class="csv-col-desc">Department / branch</span>
+                                </div>
+                                <div class="csv-col-item platform">
+                                    <img src="{{ url_for('static', filename='images/codeforces.svg') }}" alt="" class="csv-col-logo">
+                                    <span class="csv-col-name">codeforces</span>
+                                    <span class="csv-col-desc">Codeforces handle</span>
+                                </div>
+                                <div class="csv-col-item platform">
+                                    <img src="{{ url_for('static', filename='images/codechef.svg') }}" alt="" class="csv-col-logo">
+                                    <span class="csv-col-name">codechef</span>
+                                    <span class="csv-col-desc">CodeChef handle</span>
+                                </div>
+                                <div class="csv-col-item platform">
+                                    <img src="{{ url_for('static', filename='images/leetcode.svg') }}" alt="" class="csv-col-logo">
+                                    <span class="csv-col-name">leetcode</span>
+                                    <span class="csv-col-desc">LeetCode handle</span>
+                                </div>
+                            </div>
+                            <div class="csv-format-note">
+                                Column headers are case-insensitive. Platform handle columns are optional — leave blank if not applicable.
+                            </div>
+                            </div><!-- /.csv-format-inner -->
+                        </div>
+
                         <div class="dropzone-container" id="dropzone" onclick="document.getElementById('file_input').click()">
                             <span class="dropzone-icon">☁️</span>
                             <div class="dropzone-title">Upload CSV or Excel File</div>
@@ -704,23 +779,130 @@
             }
         }
 
+        function toggleCsvFormatPanel() {
+            const panel = document.getElementById('csv_format_panel');
+            const btn = document.getElementById('bulk_info_btn');
+            const open = panel.classList.toggle('open');
+            btn.classList.toggle('active', open);
+        }
+
+        // ---- Few Students tab logic ----
+        let fewStudentCount = 0;
+        const FEW_MAX = 5;
+
+        function fewStudentRowHTML(idx) {
+            const num = idx + 1;
+            return `
+            <div class="few-student-row" id="few_row_${idx}" data-idx="${idx}">
+                <div class="few-row-header">
+                    <span class="few-row-label">Student ${num}</span>
+                    ${idx > 0 ? `<button type="button" class="btn-remove-few-row" onclick="removeFewStudentRow(${idx})" title="Remove student ${num}">
+                        <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="width:13px;height:13px;"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    </button>` : ''}
+                </div>
+                <div class="form-grid few-row-grid">
+                    <div class="input-field-group">
+                        <label>Student Name</label>
+                        <input type="text" name="ms_name_${idx}" placeholder="e.g. Alex Johnson">
+                    </div>
+                    <div class="input-field-group">
+                        <label>Register Number</label>
+                        <input type="text" name="ms_register_no_${idx}" placeholder="e.g. 71762105001">
+                    </div>
+                    <div class="input-field-group">
+                        <label>Department</label>
+                        <input type="text" name="ms_department_${idx}" placeholder="e.g. Computer Science">
+                    </div>
+                    <div class="input-field-group">
+                        <label><img src="{{ url_for('static', filename='images/codeforces.svg') }}" class="field-logo" alt=""> Codeforces Handle</label>
+                        <input type="text" name="ms_codeforces_${idx}" placeholder="e.g. tourist">
+                    </div>
+                    <div class="input-field-group">
+                        <label><img src="{{ url_for('static', filename='images/codechef.svg') }}" class="field-logo" alt=""> CodeChef Handle</label>
+                        <input type="text" name="ms_codechef_${idx}" placeholder="e.g. chef_alex">
+                    </div>
+                    <div class="input-field-group">
+                        <label><img src="{{ url_for('static', filename='images/leetcode.svg') }}" class="field-logo" alt=""> LeetCode Handle</label>
+                        <input type="text" name="ms_leetcode_${idx}" placeholder="e.g. alex_lc">
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function updateFewCountBadge() {
+            const badge = document.getElementById('few_count_badge');
+            const addBtn = document.getElementById('btn_add_student');
+            const maxHint = document.getElementById('few_max_hint');
+            const rows = document.querySelectorAll('.few-student-row').length;
+            badge.textContent = rows === 1 ? '1 student' : `${rows} students`;
+            const atMax = rows >= FEW_MAX;
+            addBtn.style.display = atMax ? 'none' : 'inline-flex';
+            maxHint.style.display = atMax ? 'block' : 'none';
+        }
+
+        function addFewStudentRow() {
+            const list = document.getElementById('few_students_list');
+            const currentRows = list.querySelectorAll('.few-student-row').length;
+            if (currentRows >= FEW_MAX) return;
+            const div = document.createElement('div');
+            div.innerHTML = fewStudentRowHTML(fewStudentCount++).trim();
+            list.appendChild(div.firstChild);
+            updateFewCountBadge();
+        }
+
+        function removeFewStudentRow(idx) {
+            const row = document.getElementById(`few_row_${idx}`);
+            if (!row) return;
+            row.style.animation = 'fewRowRemove 0.22s ease forwards';
+            setTimeout(() => {
+                row.remove();
+                // Re-label remaining rows
+                document.querySelectorAll('.few-student-row').forEach((r, i) => {
+                    r.querySelector('.few-row-label').textContent = `Student ${i + 1}`;
+                });
+                updateFewCountBadge();
+            }, 220);
+        }
+
+        function initFewStudentsTab() {
+            const list = document.getElementById('few_students_list');
+            if (list.children.length === 0) {
+                fewStudentCount = 0;
+                addFewStudentRow();
+            }
+        }
+
         // Segmented Control Tab Switcher
         function switchTab(mode) {
             const singleBtn = document.getElementById('tab_btn_single');
+            const fewBtn = document.getElementById('tab_btn_few');
             const bulkBtn = document.getElementById('tab_btn_bulk');
             const singleContent = document.getElementById('tab_single_content');
+            const fewContent = document.getElementById('tab_few_content');
             const bulkContent = document.getElementById('tab_bulk_content');
 
             if (mode === 'single') {
                 singleBtn.classList.add('active');
+                fewBtn.classList.remove('active');
                 bulkBtn.classList.remove('active');
                 singleContent.style.display = 'block';
+                fewContent.style.display = 'none';
                 bulkContent.style.display = 'none';
+            } else if (mode === 'few') {
+                fewBtn.classList.add('active');
+                singleBtn.classList.remove('active');
+                bulkBtn.classList.remove('active');
+                fewContent.style.display = 'block';
+                singleContent.style.display = 'none';
+                bulkContent.style.display = 'none';
+                initFewStudentsTab();
             } else {
                 bulkBtn.classList.add('active');
                 singleBtn.classList.remove('active');
+                fewBtn.classList.remove('active');
                 bulkContent.style.display = 'block';
                 singleContent.style.display = 'none';
+                fewContent.style.display = 'none';
             }
         }
 
