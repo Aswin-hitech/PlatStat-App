@@ -43,6 +43,8 @@ def _matches(doc, query):
                         return False
                 # unknown operators are ignored rather than silently failing the match
         elif actual != expected:
+            if actual is not None and expected is not None and str(actual) == str(expected):
+                continue
             return False
     return True
 
@@ -124,15 +126,25 @@ class MemoryCollection:
     def update_one(self, query, update, upsert=False):
         doc = self.find_one(query)
         if doc:
-            for k, v in update.get("$set", {}).items():
-                doc[k] = v
+            if "$set" in update:
+                for k, v in update.get("$set", {}).items():
+                    doc[k] = v
+            else:
+                for k, v in update.items():
+                    if not k.startswith("$"):
+                        doc[k] = v
             for k, v in update.get("$setOnInsert", {}).items():
                 doc.setdefault(k, v)
             return doc
         if upsert:
             new_doc = dict(query)
             new_doc.update(update.get("$setOnInsert", {}))
-            new_doc.update(update.get("$set", {}))
+            if "$set" in update:
+                new_doc.update(update.get("$set", {}))
+            else:
+                for k, v in update.items():
+                    if not k.startswith("$"):
+                        new_doc[k] = v
             self.insert_one(new_doc)
             return new_doc
         return None
@@ -151,11 +163,25 @@ except Exception:
 
 
 class MongoCollectionAdapter:
-    def __init__(self, collection):
+    def __init__(self, collection, store=None):
         self.collection = collection
         self.memory = MemoryCollection(collection.name)
+        self.store = store
+        self.fallback = False
+
+    def _trigger_fallback(self, err, op_name):
+        logger.warning("MongoDB error in %s (%s), activating in-memory store.", op_name, err)
+        self.fallback = True
+        if self.store:
+            self.store.enabled = False
+
+    @property
+    def is_fallback(self):
+        return self.fallback or (self.store is not None and not self.store.enabled)
 
     def insert_one(self, doc):
+        if self.is_fallback:
+            return self.memory.insert_one(doc)
         try:
             res = self.collection.insert_one(doc)
             try:
@@ -164,10 +190,12 @@ class MongoCollectionAdapter:
                 pass
             return res
         except PyMongoError as err:
-            logger.warning("MongoDB error in insert_one (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "insert_one")
             return self.memory.insert_one(doc)
 
     def insert_many(self, docs):
+        if self.is_fallback:
+            return self.memory.insert_many(docs)
         try:
             res = self.collection.insert_many(docs)
             try:
@@ -176,10 +204,12 @@ class MongoCollectionAdapter:
                 pass
             return res
         except PyMongoError as err:
-            logger.warning("MongoDB error in insert_many (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "insert_many")
             return self.memory.insert_many(docs)
 
     def find(self, query=None, projection=None, sort=None, skip=0, limit=0):
+        if self.is_fallback:
+            return self.memory.find(query=query, projection=projection, sort=sort, skip=skip, limit=limit)
         try:
             cursor = self.collection.find(query or {}, projection)
             if sort:
@@ -188,47 +218,57 @@ class MongoCollectionAdapter:
                 cursor = cursor.skip(skip)
             if limit:
                 cursor = cursor.limit(limit)
-            return cursor
+            return MemoryCursor(list(cursor))
         except PyMongoError as err:
-            logger.warning("MongoDB error in find (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "find")
             return self.memory.find(query=query, projection=projection, sort=sort, skip=skip, limit=limit)
 
     def find_one(self, query=None, projection=None, sort=None):
+        if self.is_fallback:
+            return self.memory.find_one(query=query, projection=projection, sort=sort)
         try:
             cursor = self.find(query=query, projection=projection, sort=sort, limit=1)
             return next(iter(cursor), None)
         except PyMongoError as err:
-            logger.warning("MongoDB error in find_one (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "find_one")
             return self.memory.find_one(query=query, projection=projection, sort=sort)
 
     def count_documents(self, query=None):
+        if self.is_fallback:
+            return self.memory.count_documents(query or {})
         try:
             return self.collection.count_documents(query or {})
         except PyMongoError as err:
-            logger.warning("MongoDB error in count_documents (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "count_documents")
             return self.memory.count_documents(query or {})
 
     def delete_many(self, query=None):
+        if self.is_fallback:
+            return self.memory.delete_many(query or {})
         try:
             self.memory.delete_many(query or {})
             return self.collection.delete_many(query or {})
         except PyMongoError as err:
-            logger.warning("MongoDB error in delete_many (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "delete_many")
             return self.memory.delete_many(query or {})
 
     def update_one(self, query, update, upsert=False):
+        if self.is_fallback:
+            return self.memory.update_one(query, update, upsert=upsert)
         try:
             self.memory.update_one(query, update, upsert=upsert)
             return self.collection.update_one(query, update, upsert=upsert)
         except PyMongoError as err:
-            logger.warning("MongoDB error in update_one (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "update_one")
             return self.memory.update_one(query, update, upsert=upsert)
 
     def aggregate(self, pipeline):
+        if self.is_fallback:
+            return self.memory.aggregate(pipeline)
         try:
-            return self.collection.aggregate(pipeline)
+            return list(self.collection.aggregate(pipeline))
         except PyMongoError as err:
-            logger.warning("MongoDB error in aggregate (%s), falling back to memory.", err)
+            self._trigger_fallback(err, "aggregate")
             return self.memory.aggregate(pipeline)
 
     def create_index(self, *args, **kwargs):
@@ -315,7 +355,7 @@ class MongoStore:
             collection = MemoryCollection(name)
             self._collections[name] = collection
             return collection
-        collection = MongoCollectionAdapter(self.db[name]) if self.enabled else MemoryCollection(name)
+        collection = MongoCollectionAdapter(self.db[name], store=self) if self.enabled else MemoryCollection(name)
         self._collections[name] = collection
         return collection
 

@@ -262,3 +262,52 @@ def test_unique_table_download(client):
     assert b'Alice CodeChef' not in resp_lc_csv.data
 
 
+def test_results_template_client_export_elements(client):
+    from flask import render_template
+    from app import app
+    with app.test_request_context():
+        rendered = render_template(
+            "results.html",
+            codeforces=[{"contest": "Round 950", "rows": [{"Name": "Tester", "Rating": 1500}]}],
+            codechef=[{"contest": "Starters 150", "rows": [{"Name": "Chef", "Rating": 1600}]}],
+            leetcode=[{"contest": "Weekly 400", "rows": [{"Name": "Leet", "Rating": 1700}]}],
+            selected_platforms=["codeforces", "codechef", "leetcode"],
+            evaluation_time=12.5,
+            student_count=1
+        )
+        assert "xlsx.full.min.js" in rendered
+        assert "exportSingleContestTable" in rendered
+        assert "exportAllContests" in rendered
+        assert "data-platform=\"Codeforces\"" in rendered
+        assert "data-platform=\"CodeChef\"" in rendered
+        assert "data-platform=\"LeetCode\"" in rendered
+        assert "btn-table-export-excel" in rendered
+        assert "btn-table-export-csv" in rendered
+        assert "Export All Tables (.xlsx)" in rendered
+        assert "Export All Tables (.csv)" in rendered
+
+
+def test_cache_persistence_and_fallback():
+    import app as app_mod
+    import tempfile
+    import os
+    import json
+
+    # Set up dummy tables
+    test_tables = {
+        "codeforces": [{"contest": "Round 999", "rows": [{"Name": "Persistent User", "Rating": 2100}]}],
+        "codechef": [],
+        "leetcode": []
+    }
+    app_mod._save_cache_tables(test_tables)
+
+    # Wipe in-memory cache to simulate serverless cold-start or worker reboot
+    app_mod.cache_tables = {"codeforces": [], "codechef": [], "leetcode": []}
+
+    # Verify _load_cache_tables restores from temp file or DB
+    loaded = app_mod._load_cache_tables()
+    assert any(b.get("rows") for b in loaded.get("codeforces", []))
+    assert loaded["codeforces"][0]["contest"] == "Round 999"
+
+
+

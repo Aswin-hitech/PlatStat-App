@@ -7,6 +7,12 @@
     <link rel="shortcut icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/styles.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/static/xlsx.full.min.js"></script>
+    <script>
+        if (typeof XLSX === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');
+        }
+    </script>
 </head>
 <body>
     <div class="app-container">
@@ -54,11 +60,27 @@
 
             <div class="hero-actions">
                 {% if selected_platforms and selected_platforms|length == 1 %}
-                <a href="/download?platform={{ selected_platforms[0] }}&format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export All Tables (.xlsx)</a>
-                <a href="/download?platform={{ selected_platforms[0] }}&format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export All Tables (.csv)</a>
+                <a href="/download?platform={{ selected_platforms[0] }}&format=xlsx" 
+                   class="btn-download-excel" 
+                   download="PlatStat_{{ selected_platforms[0] }}_All_Tables.xlsx"
+                   onclick="exportAllContests('xlsx', event)" 
+                   style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export All Tables (.xlsx)</a>
+                <a href="/download?platform={{ selected_platforms[0] }}&format=csv" 
+                   class="btn-secondary" 
+                   download="PlatStat_{{ selected_platforms[0] }}_All_Tables.csv"
+                   onclick="exportAllContests('csv', event)" 
+                   style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export All Tables (.csv)</a>
                 {% else %}
-                <a href="/download?format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export All Tables (.xlsx)</a>
-                <a href="/download?format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export All Tables (.csv)</a>
+                <a href="/download?format=xlsx" 
+                   class="btn-download-excel" 
+                   download="PlatStat_All_Contests.xlsx"
+                   onclick="exportAllContests('xlsx', event)" 
+                   style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export All Tables (.xlsx)</a>
+                <a href="/download?format=csv" 
+                   class="btn-secondary" 
+                   download="PlatStat_All_Contests.csv"
+                   onclick="exportAllContests('csv', event)" 
+                   style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export All Tables (.csv)</a>
                 {% endif %}
                 <a href="/" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">← Back to Analyzer</a>
             </div>
@@ -72,7 +94,11 @@
                 </h3>
 
                 {% for block in contest_blocks %}
-                <div class="contest-table-card" style="margin-bottom: 28px; background: rgba(255,255,255,0.7); border:1px solid var(--card-border); border-radius:var(--radius-md); padding:20px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
+                <div class="contest-table-card" 
+                     data-platform="{{ title }}" 
+                     data-contest="{{ block.contest }}" 
+                     data-date="{{ block.date or '' }}"
+                     style="margin-bottom: 28px; background: rgba(255,255,255,0.7); border:1px solid var(--card-border); border-radius:var(--radius-md); padding:20px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
                         <h4 style="font-family:'Outfit', sans-serif; font-size:1.15rem; font-weight:700; color:var(--text-primary); margin:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <span class="badge">{{ title }}</span>
@@ -89,11 +115,15 @@
                             <div class="table-export-actions" style="display:inline-flex; gap:8px;">
                                 <a href="/download?platform={{ title|lower }}&table_idx={{ loop.index0 }}&contest={{ block.contest|urlencode }}&format=xlsx" 
                                    class="btn-table-export-excel" 
+                                   download="{{ title }}_{{ block.contest|replace(' ', '_') }}.xlsx"
+                                   onclick="exportSingleContestTable(this, 'xlsx', event)"
                                    title="Export this unique {{ title }} {{ block.contest }} table to Excel (.xlsx)">
                                     📥 Export Excel (.xlsx)
                                 </a>
                                 <a href="/download?platform={{ title|lower }}&table_idx={{ loop.index0 }}&contest={{ block.contest|urlencode }}&format=csv" 
                                    class="btn-table-export-csv" 
+                                   download="{{ title }}_{{ block.contest|replace(' ', '_') }}.csv"
+                                   onclick="exportSingleContestTable(this, 'csv', event)"
                                    title="Export this unique {{ title }} {{ block.contest }} table to CSV (.csv)">
                                     📄 CSV
                                 </a>
@@ -216,6 +246,211 @@
                     if (toast.parentElement) toast.parentElement.removeChild(toast);
                 }, 400);
             }
+        }
+
+        function getCleanContestFilename(platform, contest, date, ext) {
+            const safePlatform = (platform || 'Platform').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const safeContest = (contest || 'Contest').replace(/[^a-zA-Z0-9_-]/g, '_').replace(/__+/g, '_');
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const todayStr = `${day}-${month}-${year}`;
+
+            let base = `${safePlatform}_${safeContest}`;
+            if (date) {
+                const safeDate = String(date).replace(/[^a-zA-Z0-9_-]/g, '_');
+                base += `_${safeDate}`;
+            }
+            base += `_${todayStr}`;
+            return `${base}.${ext}`;
+        }
+
+        function exportTableToCsvBlob(table, filename) {
+            if (!table) return false;
+            const rows = table.querySelectorAll('tr');
+            if (!rows.length) return false;
+            const lines = [];
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('th, td');
+                const line = Array.from(cells).map(cell => {
+                    let text = cell.textContent.trim();
+                    text = text.replace(/"/g, '""');
+                    return `"${text}"`;
+                }).join(',');
+                lines.push(line);
+            });
+            const csvContent = "\uFEFF" + lines.join("\r\n");
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 500);
+            return true;
+        }
+
+        function exportSingleContestTable(btn, format, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            const card = btn.closest('.contest-table-card');
+            if (!card) return;
+            const table = card.querySelector('table');
+            if (!table) {
+                alert('No table data found to export.');
+                return;
+            }
+
+            const platform = card.getAttribute('data-platform') || 'Platform';
+            const contest = card.getAttribute('data-contest') || 'Contest';
+            const contestDate = card.getAttribute('data-date') || '';
+            const filename = getCleanContestFilename(platform, contest, contestDate, format);
+
+            if (format === 'csv') {
+                const ok = exportTableToCsvBlob(table, filename);
+                if (ok) {
+                    showToastAlert('Export Successful', `Exported ${platform} - ${contest} to CSV!`, '📄');
+                }
+                return;
+            }
+
+            // format === 'xlsx'
+            if (typeof XLSX !== 'undefined') {
+                try {
+                    const ws = XLSX.utils.table_to_sheet(table, { raw: false });
+                    const colWidths = [];
+                    table.querySelectorAll('tr').forEach(tr => {
+                        Array.from(tr.children).forEach((cell, idx) => {
+                            const len = (cell.textContent || '').trim().length;
+                            colWidths[idx] = Math.max(colWidths[idx] || 10, len + 3);
+                        });
+                    });
+                    ws['!cols'] = colWidths.map(w => ({ wch: Math.min(w, 42) }));
+
+                    const wb = XLSX.utils.book_new();
+                    let sheetName = `${platform.slice(0, 2).toUpperCase()} - ${contest}`.replace(/[\/\\?*\[\]:]/g, '_').substring(0, 31);
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                    XLSX.writeFile(wb, filename);
+                    showToastAlert('Export Successful', `Exported ${platform} - ${contest} to Excel (.xlsx)!`, '📥');
+                    return;
+                } catch (e) {
+                    console.warn('XLSX client export failed, falling back to server download:', e);
+                }
+            }
+
+            // Fallback to server download
+            const fallbackUrl = btn.getAttribute('href');
+            if (fallbackUrl) {
+                window.location.href = fallbackUrl;
+            }
+        }
+
+        function exportAllContests(format, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            const cards = document.querySelectorAll('.contest-table-card');
+            if (!cards.length) {
+                alert('No contest tables available to export.');
+                return;
+            }
+
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const todayStr = `${day}-${month}-${year}`;
+
+            if (format === 'xlsx' && typeof XLSX !== 'undefined') {
+                try {
+                    const wb = XLSX.utils.book_new();
+                    let count = 0;
+                    cards.forEach((card, idx) => {
+                        const table = card.querySelector('table');
+                        if (!table) return;
+                        const platform = card.getAttribute('data-platform') || 'Platform';
+                        const contest = card.getAttribute('data-contest') || `Contest_${idx + 1}`;
+                        
+                        let baseSheet = `${platform.slice(0, 2).toUpperCase()} - ${contest}`.replace(/[\/\\?*\[\]:]/g, '_').substring(0, 28);
+                        let finalSheet = baseSheet;
+                        let c = 2;
+                        while (wb.SheetNames.includes(finalSheet)) {
+                            finalSheet = `${baseSheet} (${c++})`;
+                        }
+
+                        const ws = XLSX.utils.table_to_sheet(table, { raw: false });
+                        const colWidths = [];
+                        table.querySelectorAll('tr').forEach(tr => {
+                            Array.from(tr.children).forEach((cell, i) => {
+                                const len = (cell.textContent || '').trim().length;
+                                colWidths[i] = Math.max(colWidths[i] || 10, len + 3);
+                            });
+                        });
+                        ws['!cols'] = colWidths.map(w => ({ wch: Math.min(w, 42) }));
+                        XLSX.utils.book_append_sheet(wb, ws, finalSheet);
+                        count++;
+                    });
+
+                    if (count > 0) {
+                        const filename = `PlatStat_All_Contests_${todayStr}.xlsx`;
+                        XLSX.writeFile(wb, filename);
+                        showToastAlert('Export Successful', `Exported all ${count} contest tables into Excel (.xlsx)!`, '📥');
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('XLSX export-all failed, falling back to server download:', e);
+                }
+            }
+
+            if (format === 'csv') {
+                const lines = [];
+                let count = 0;
+                cards.forEach((card, idx) => {
+                    const table = card.querySelector('table');
+                    if (!table) return;
+                    const platform = card.getAttribute('data-platform') || 'Platform';
+                    const contest = card.getAttribute('data-contest') || `Contest_${idx + 1}`;
+                    const date = card.getAttribute('data-date') || '';
+                    
+                    lines.push(`"=== ${platform.toUpperCase()} - ${contest} ${date ? '(' + date + ')' : ''} ==="`);
+                    const rows = table.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const cells = row.querySelectorAll('th, td');
+                        const line = Array.from(cells).map(cell => {
+                            let text = cell.textContent.trim();
+                            text = text.replace(/"/g, '""');
+                            return `"${text}"`;
+                        }).join(',');
+                        lines.push(line);
+                    });
+                    lines.push('');
+                    count++;
+                });
+
+                if (count > 0) {
+                    const csvContent = "\uFEFF" + lines.join("\r\n");
+                    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `PlatStat_All_Contests_${todayStr}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 500);
+                    showToastAlert('Export Successful', `Exported all ${count} contest tables to CSV!`, '📄');
+                    return;
+                }
+            }
+
+            // Server fallback
+            window.location.href = `/download?format=${format}`;
         }
 
         document.addEventListener('DOMContentLoaded', () => {

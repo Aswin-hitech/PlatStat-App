@@ -63,7 +63,7 @@
                         <div class="platform-card active" id="card_codeforces" onclick="togglePlatform('codeforces')">
                             <input type="checkbox" name="platform_codeforces" id="platform_codeforces" checked>
                             <span class="check-indicator">✓</span>
-                            <span class="platform-icon">📊</span>
+                            <img class="platform-icon" src="{{ url_for('static', filename='images/codeforces.svg') }}" alt="Codeforces">
                             <span class="platform-name">Codeforces</span>
                         </div>
 
@@ -71,7 +71,7 @@
                         <div class="platform-card active" id="card_codechef" onclick="togglePlatform('codechef')">
                             <input type="checkbox" name="platform_codechef" id="platform_codechef" checked>
                             <span class="check-indicator">✓</span>
-                            <span class="platform-icon">🍳</span>
+                            <img class="platform-icon" src="{{ url_for('static', filename='images/codechef.svg') }}" alt="CodeChef">
                             <span class="platform-name">CodeChef</span>
                         </div>
 
@@ -79,7 +79,7 @@
                         <div class="platform-card active" id="card_leetcode" onclick="togglePlatform('leetcode')">
                             <input type="checkbox" name="platform_leetcode" id="platform_leetcode" checked>
                             <span class="check-indicator">✓</span>
-                            <span class="platform-icon">⚡</span>
+                            <img class="platform-icon" src="{{ url_for('static', filename='images/leetcode.svg') }}" alt="LeetCode">
                             <span class="platform-name">LeetCode</span>
                         </div>
                     </div>

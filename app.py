@@ -62,6 +62,9 @@ def _serialize_mongo(obj):
 
 
 
+import tempfile
+from db import store
+
 cache_tables = {
     "codeforces": [],
     "codechef": [],
@@ -69,14 +72,31 @@ cache_tables = {
 }
 
 CACHE_FILE = os.path.join(app.root_path, "cache_tables.json")
+TEMP_CACHE_FILE = os.path.join(tempfile.gettempdir(), "platstat_cache_tables.json")
 
 
 def _save_cache_tables(tables):
     global cache_tables
     cache_tables = tables
+    # 1. Local workspace root
     try:
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(tables, f, default=str)
+    except Exception:
+        pass
+    # 2. System temp directory (writable in AWS Lambda/Vercel /tmp)
+    try:
+        with open(TEMP_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(tables, f, default=str)
+    except Exception:
+        pass
+    # 3. MongoDB collection for persistent cross-instance / cross-process sharing
+    try:
+        store.collection("eval_cache").update_one(
+            {"_id": "latest_evaluation"},
+            {"$set": {"tables": tables, "updated_at": datetime.utcnow().isoformat()}},
+            upsert=True,
+        )
     except Exception:
         pass
 
@@ -89,15 +109,40 @@ def _load_cache_tables():
     )
     if has_data:
         return cache_tables
+
+    # 1. Try local root cache file
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
-                if isinstance(loaded, dict):
+                if isinstance(loaded, dict) and any(loaded.get(k) for k in ("codeforces", "codechef", "leetcode")):
                     cache_tables = loaded
                     return cache_tables
         except Exception:
             pass
+
+    # 2. Try temp cache file
+    if os.path.exists(TEMP_CACHE_FILE):
+        try:
+            with open(TEMP_CACHE_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict) and any(loaded.get(k) for k in ("codeforces", "codechef", "leetcode")):
+                    cache_tables = loaded
+                    return cache_tables
+        except Exception:
+            pass
+
+    # 3. Try database eval_cache
+    try:
+        doc = store.collection("eval_cache").find_one({"_id": "latest_evaluation"})
+        if doc and isinstance(doc.get("tables"), dict):
+            loaded = doc["tables"]
+            if any(loaded.get(k) for k in ("codeforces", "codechef", "leetcode")):
+                cache_tables = loaded
+                return cache_tables
+    except Exception:
+        pass
+
     return cache_tables
 
 
@@ -745,8 +790,10 @@ def download():
                 target_block = blocks[idx]
 
         if not target_block and requested_contest:
+            req_c_norm = requested_contest.strip().lower()
             for b in blocks:
-                if b.get("contest") == requested_contest:
+                c_title = str(b.get("contest") or "").strip().lower()
+                if c_title == req_c_norm or req_c_norm in c_title:
                     target_block = b
                     break
 

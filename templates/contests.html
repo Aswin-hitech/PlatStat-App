@@ -125,9 +125,9 @@
         let selectedContestIds = new Set();
 
         const PLATFORM_ICONS = {
-            leetcode: '⚡',
-            codeforces: '📈',
-            codechef: '🍳',
+            leetcode: '<img src="{{ url_for('static', filename='images/leetcode.svg') }}" alt="LeetCode" class="contest-platform-icon">',
+            codeforces: '<img src="{{ url_for('static', filename='images/codeforces.svg') }}" alt="Codeforces" class="contest-platform-icon">',
+            codechef: '<img src="{{ url_for('static', filename='images/codechef.svg') }}" alt="CodeChef" class="contest-platform-icon">',
             atcoder: '🎯'
         };
 
