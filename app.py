@@ -1069,6 +1069,7 @@ def get_contests():
 
 
 @app.route("/api/contests/sync", methods=["GET", "POST"])
+@app.route("/api/cron_sync", methods=["GET", "POST"])   # Vercel cron entry point
 def sync_contests():
     res = contest_service.sync_contests()
     synced_cnt = res.get("synced", res.get("syncedCount", 0)) if isinstance(res, dict) else 0

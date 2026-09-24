@@ -1,23 +1,24 @@
 {
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 60,
-      "memory": 1024
-    },
-    "api/contests/sync.py": {
-      "maxDuration": 60,
-      "memory": 512
-    }
-  },
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/api/index"
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/cron_sync.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
     }
   ],
   "crons": [
     {
-      "path": "/api/contests/sync",
+      "path": "/api/cron_sync",
       "schedule": "0 0 * * *"
     }
   ]
