@@ -1546,3 +1546,320 @@ button, input[type="submit"], input[type="button"], .btn, .btn-primary-cta, .btn
         transform: translateX(100%) scale(0.9);
     }
 }
+
+/* ==========================================================================
+   Evaluation Time & Live Progress Modal Styles
+   ========================================================================== */
+.eval-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(8, 15, 30, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    animation: evalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes evalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.eval-modal-card {
+    background: linear-gradient(155deg, #152238 0%, #0d1627 100%);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 20px;
+    padding: 32px 36px;
+    max-width: 540px;
+    width: 92%;
+    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.65), 0 0 40px rgba(56, 189, 248, 0.15);
+    color: #ffffff;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    animation: evalSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes evalSlideUp {
+    from {
+        opacity: 0;
+        transform: scale(0.92) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.eval-icon-pulse {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(56, 189, 248, 0.12);
+    border-radius: 50%;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.eval-icon-pulse .eval-icon {
+    font-size: 28px;
+    z-index: 2;
+}
+
+.eval-icon-pulse .pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid rgba(56, 189, 248, 0.6);
+    animation: pulseWave 2s infinite ease-out;
+}
+
+@keyframes pulseWave {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1.6);
+        opacity: 0;
+    }
+}
+
+.eval-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.02em;
+}
+
+.eval-subtitle {
+    font-size: 14px;
+    color: #94a3b8;
+    margin: 0 0 20px 0;
+    line-height: 1.4;
+}
+
+.eval-timer-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    background: rgba(2, 6, 23, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 16px 24px;
+    margin: 18px 0;
+}
+
+.eval-timer-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.timer-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.timer-digits {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: #38bdf8;
+    text-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+    line-height: 1;
+}
+
+.timer-separator {
+    font-size: 1.6rem;
+    color: rgba(255, 255, 255, 0.2);
+    font-weight: 300;
+}
+
+.eval-progress-container {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 16px 0 8px 0;
+}
+
+.eval-progress-bar {
+    height: 100%;
+    width: 2%;
+    background: linear-gradient(90deg, #38bdf8 0%, #3b82f6 50%, #818cf8 100%);
+    border-radius: 999px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.eval-progress-status {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 18px;
+}
+
+.eval-progress-status strong {
+    color: #38bdf8;
+}
+
+.eval-notice-box {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    text-align: left;
+    margin-bottom: 18px;
+}
+
+.notice-icon {
+    font-size: 18px;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
+.notice-content {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #cbd5e1;
+}
+
+.notice-content strong {
+    color: #60a5fa;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.eval-steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+    margin-bottom: 18px;
+    background: rgba(2, 6, 23, 0.35);
+    border-radius: 10px;
+    padding: 12px 16px;
+}
+
+.eval-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #64748b;
+    transition: all 0.3s ease;
+}
+
+.eval-step .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #334155;
+    transition: all 0.3s ease;
+}
+
+.eval-step.active {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.eval-step.active .step-dot {
+    background: #38bdf8;
+    box-shadow: 0 0 8px #38bdf8;
+    transform: scale(1.2);
+}
+
+.eval-step.done {
+    color: #10b981;
+}
+
+.eval-step.done .step-dot {
+    background: #10b981;
+}
+
+.eval-footer-tip {
+    font-size: 11.5px;
+    color: #64748b;
+    margin: 0;
+}
+
+/* ==========================================================================
+   Table-Level Action Buttons (.btn-table-export-excel, .btn-table-export-csv)
+   ========================================================================== */
+.table-export-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-table-export-excel {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff !important;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 12.5px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.btn-table-export-excel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+.btn-table-export-csv {
+    background: #ffffff;
+    color: #1e293b !important;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 12.5px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.btn-table-export-csv:hover {
+    border-color: #3b82f6;
+    color: #2563eb !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}

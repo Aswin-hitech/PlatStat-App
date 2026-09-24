@@ -218,3 +218,47 @@ def test_validation_errors(client):
     resp2 = client.post('/topper', data={'platform': 'leetcode', 'month': '8', 'sheet': (io.BytesIO(b'dummy'), 'test.txt')})
     assert resp2.status_code in (200, 400)
 
+
+def test_unique_table_download(client):
+    from app import _save_cache_tables
+    dummy_tables = {
+        "codechef": [
+            {
+                "contest": "Starters 150",
+                "date": "2026-09-24",
+                "rows": [
+                    {"S. No": 1, "Name": "Alice CodeChef", "Current Rating": "1650"}
+                ]
+            }
+        ],
+        "leetcode": [
+            {
+                "contest": "Weekly Contest 400",
+                "rows": [
+                    {"S. No": 1, "Name": "Bob LeetCode", "Current Rating": "1800"}
+                ]
+            }
+        ]
+    }
+    _save_cache_tables(dummy_tables)
+
+    # 1. Test unique table export for CodeChef table (.xlsx)
+    resp_cc_xlsx = client.get('/download?platform=codechef&table_idx=0&format=xlsx')
+    assert resp_cc_xlsx.status_code == 200
+    assert resp_cc_xlsx.mimetype == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    assert 'Codechef_Starters_150' in resp_cc_xlsx.headers.get('Content-Disposition', '')
+
+    # 2. Test unique table export for CodeChef table (.csv)
+    resp_cc_csv = client.get('/download?platform=codechef&table_idx=0&format=csv')
+    assert resp_cc_csv.status_code == 200
+    assert resp_cc_csv.mimetype.startswith('text/csv')
+    assert b'Alice CodeChef' in resp_cc_csv.data
+    assert b'Bob LeetCode' not in resp_cc_csv.data  # Verify export is uniquely for this table only
+
+    # 3. Test unique table export for LeetCode table (.csv)
+    resp_lc_csv = client.get('/download?platform=leetcode&table_idx=0&format=csv')
+    assert resp_lc_csv.status_code == 200
+    assert b'Bob LeetCode' in resp_lc_csv.data
+    assert b'Alice CodeChef' not in resp_lc_csv.data
+
+

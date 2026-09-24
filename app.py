@@ -1,6 +1,7 @@
 import re
 import os
 import json
+import time
 from datetime import datetime
 from io import BytesIO
 from bson import ObjectId
@@ -14,7 +15,7 @@ from parsers.csv_parser import parse_csv
 from parsers.excel_parser import parse_excel
 from repositories import ClassRepository
 from services.class_service import ClassService
-from services.codechef_service import get_cc_summary, get_latest_cc_contests
+from services.codechef_service import get_cc_summary, get_latest_cc_contests, fetch_codechef_profile
 from services.codeforces_service import get_cf_summary, get_latest_cf_contests
 from services.contest_scheduler import contest_scheduler
 from services.contest_service import contest_service
@@ -266,6 +267,40 @@ def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf
             tables["codeforces"].append({"contest": c_title, "date": cf_t.get("date"), "rows": c_rows})
 
     if "codechef" in selected_platforms:
+        # Pre-fetch CodeChef user profiles with safe anti-block rate limiting:
+        # Visit 5 accounts, fetch data, leave 20 seconds gap, and again 5 accounts.
+        unique_handles = list(dict.fromkeys(
+            _clean_text(r.get("codechef"))
+            for r in rows
+            if _clean_text(r.get("codechef")) and _clean_text(r.get("name") or r.get("studentName"))
+        ))
+
+        CC_BATCH_SIZE = 5
+        CC_GAP_SECONDS = 20
+        total_handles = len(unique_handles)
+
+        if total_handles > 0:
+            print(f"[codechef] Starting safe batch fetch for {total_handles} student account(s) (5 accounts per batch, 20s gap)...")
+
+        for b_start in range(0, total_handles, CC_BATCH_SIZE):
+            b_handles = unique_handles[b_start:b_start + CC_BATCH_SIZE]
+            b_num = (b_start // CC_BATCH_SIZE) + 1
+            total_b = (total_handles + CC_BATCH_SIZE - 1) // CC_BATCH_SIZE
+            print(f"[codechef] Batch {b_num}/{total_b}: Fetching accounts {b_start+1}-{b_start+len(b_handles)} of {total_handles} ({', '.join(b_handles)})...")
+
+            for h_idx, h in enumerate(b_handles):
+                try:
+                    fetch_codechef_profile(h)
+                except Exception as err:
+                    print(f"[codechef] Pre-fetch error for '{h}': {err}")
+                if h_idx < len(b_handles) - 1:
+                    time.sleep(0.8)  # human-like pause between individual accounts
+
+            # Leave 20 seconds gap between batches if more accounts remain
+            if b_start + CC_BATCH_SIZE < total_handles:
+                print(f"[codechef] Completed batch {b_num}. Leaving {CC_GAP_SECONDS}s gap before next batch to protect IDs...")
+                time.sleep(CC_GAP_SECONDS)
+
         for cc_t in (cc_targets or [{"title": None, "date": None}]):
             c_title = cc_t.get("title") or "General Summary"
             eligible = []
@@ -277,21 +312,21 @@ def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf
                 if name and handle:
                     eligible.append((name, regno, dept, handle))
 
-            c_rows = [None] * len(eligible)
-
-            def _fetch_cc(idx, item):
-                n, r, d, h = item
+            c_rows = []
+            for idx, (n, r, d, h) in enumerate(eligible):
                 try:
-                    return idx, get_cc_summary(
+                    row_res = get_cc_summary(
                         idx + 1, n, r, d, h,
                         target_contest_title=cc_t.get("title"),
                         target_contest_date=cc_t.get("date")
                     )
-                except Exception:
+                    c_rows.append(row_res)
+                except Exception as exc:
+                    print(f"[codechef] Error compiling summary for {h}: {exc}")
                     from utils.date_utils import today_ddmmyyyy
                     from services.codechef_service import format_contest_date
                     out_d = format_contest_date(cc_t.get("date")) if cc_t.get("date") else today_ddmmyyyy()
-                    return idx, {
+                    c_rows.append({
                         "S. No": idx + 1,
                         "Name of the Student": n,
                         "Register No": r,
@@ -307,19 +342,8 @@ def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf
                         "Contest participated": "AB",
                         "Problems Solved": "AB",
                         "Target Contest Solved": "AB",
-                    }
+                    })
 
-            if eligible:
-                workers = min(max_workers, len(eligible))
-                with ThreadPoolExecutor(max_workers=workers) as pool:
-                    futures = [pool.submit(_fetch_cc, i, item) for i, item in enumerate(eligible)]
-                    for fut in as_completed(futures):
-                        try:
-                            idx, row_res = fut.result()
-                            c_rows[idx] = row_res
-                        except Exception:
-                            pass
-            c_rows = [r for r in c_rows if r is not None]
             tables["codechef"].append({"contest": c_title, "date": cc_t.get("date"), "rows": c_rows})
 
     if "leetcode" in selected_platforms:
@@ -658,7 +682,9 @@ def index():
             error="Provide at least one platform ID for the selected platforms.",
         ), 400
 
+    start_eval_time = time.time()
     tables = _analyze_rows(rows, selected_platforms, lc_targets, cc_targets, cf_targets)
+    evaluation_time = round(time.time() - start_eval_time, 1)
 
     _save_cache_tables(tables)
 
@@ -666,10 +692,10 @@ def index():
     platforms_str = ", ".join([p.capitalize() for p in selected_platforms])
     if uploaded_file and uploaded_file.filename:
         toast_title = "File Upload & Evaluation Completed 🚀"
-        toast_msg = f"Successfully uploaded '{uploaded_file.filename}' and evaluated stats for {student_count} student records across {platforms_str}."
+        toast_msg = f"Successfully uploaded '{uploaded_file.filename}' and evaluated stats for {student_count} student records in {evaluation_time}s across {platforms_str}."
     else:
         toast_title = "Student Stats Evaluation Completed 🎯"
-        toast_msg = f"Successfully evaluated stats for {student_count} student records across {platforms_str}."
+        toast_msg = f"Successfully evaluated stats for {student_count} student records in {evaluation_time}s across {platforms_str}."
 
     notification_manager.send_notification(
         user_id="default_user",
@@ -684,6 +710,8 @@ def index():
         codechef=tables["codechef"],
         leetcode=tables["leetcode"],
         selected_platforms=selected_platforms,
+        evaluation_time=evaluation_time,
+        student_count=student_count,
         completion_toast={"title": toast_title, "message": toast_msg, "icon": "🚀" if uploaded_file else "🎯"}
     )
 
@@ -692,6 +720,8 @@ def index():
 def download():
     export_format = request.args.get("format", "xlsx").lower()
     requested_platform = request.args.get("platform", "").lower().strip()
+    requested_contest = request.args.get("contest", "").strip()
+    table_idx_str = request.args.get("table_idx", "").strip()
 
     tables = _load_cache_tables()
 
@@ -702,6 +732,85 @@ def download():
     if not has_data:
         return "No data to download.", 404
 
+    # -------------------------------------------------------------------------
+    # 1. Unique Table Export (Targeting a specific table from output)
+    # -------------------------------------------------------------------------
+    if requested_platform and (table_idx_str != "" or requested_contest):
+        blocks = tables.get(requested_platform, [])
+        target_block = None
+
+        if table_idx_str.isdigit():
+            idx = int(table_idx_str)
+            if 0 <= idx < len(blocks):
+                target_block = blocks[idx]
+
+        if not target_block and requested_contest:
+            for b in blocks:
+                if b.get("contest") == requested_contest:
+                    target_block = b
+                    break
+
+        if not target_block and blocks:
+            target_block = blocks[0]
+
+        if not target_block or not target_block.get("rows"):
+            return "No data found for the requested table.", 404
+
+        contest_title = target_block.get("contest") or requested_platform.capitalize()
+        contest_date = target_block.get("date") or ""
+        rows = target_block.get("rows", [])
+        cleaned_rows = [_clean_row_dict(r) for r in rows]
+        df = pd.DataFrame(cleaned_rows)
+
+        # Build clean, unique filename for this specific table
+        safe_p = requested_platform.capitalize()
+        safe_c = re.sub(r'[^a-zA-Z0-9_-]', '_', str(contest_title)).strip('_')
+        today_str = datetime.now().strftime("%d-%m-%Y")
+        if contest_date:
+            safe_d = re.sub(r'[^a-zA-Z0-9_-]', '_', str(contest_date)).strip('_')
+            filename = f"{safe_p}_{safe_c}_{safe_d}_{today_str}.{export_format}"
+        else:
+            filename = f"{safe_p}_{safe_c}_{today_str}.{export_format}"
+
+        if export_format == "csv":
+            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+            output = BytesIO(csv_bytes)
+            output.seek(0)
+            response = send_file(
+                output,
+                as_attachment=True,
+                download_name=filename,
+                mimetype="text/csv",
+            )
+            response.headers["Content-Type"] = "text/csv; charset=utf-8"
+            response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            return response
+
+        # Unique Excel export with dedicated styled worksheet
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            sheet_title = _sanitize_sheet_title(contest_title)[:31]
+            df.to_excel(writer, sheet_name=sheet_title, index=False)
+            try:
+                _auto_fit_columns(writer.sheets[sheet_title])
+            except Exception:
+                pass
+        output.seek(0)
+
+        response = send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+
+    # -------------------------------------------------------------------------
+    # 2. Combined / Platform Multi-Table Export (Global Download)
+    # -------------------------------------------------------------------------
     active_platforms = [k for k, v in tables.items() if v and any(b.get("rows") for b in v)]
 
     if requested_platform and tables.get(requested_platform):
@@ -1156,6 +1265,8 @@ def internal_error(_):
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    import traceback
+    traceback.print_exc()
     if hasattr(e, "code") and e.code < 500:
         return e
     return render_template("index.html", error=f"Unexpected error: {str(e)}"), 500

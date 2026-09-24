@@ -33,21 +33,32 @@
         </nav>
 
         <div class="wide-card">
-            <header style="margin-bottom: 28px;">
-                <span class="page-eyebrow">
-                    <img src="/static/favicon.ico" alt="PlatStat Logo" style="width:16px; height:16px; vertical-align:middle; margin-right:6px; border-radius:4px;">
-                    ANALYSIS SUMMARY
-                </span>
-                <h2 style="font-size: 2.4rem; font-family:'Outfit', sans-serif; font-weight:900;">Platform Evaluation Results</h2>
+            <header style="margin-bottom: 28px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;">
+                <div>
+                    <span class="page-eyebrow">
+                        <img src="/static/favicon.ico" alt="PlatStat Logo" style="width:16px; height:16px; vertical-align:middle; margin-right:6px; border-radius:4px;">
+                        ANALYSIS SUMMARY
+                    </span>
+                    <h2 style="font-size: 2.4rem; font-family:'Outfit', sans-serif; font-weight:900; margin:0;">Platform Evaluation Results</h2>
+                </div>
+                {% if evaluation_time %}
+                <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:var(--radius-sm); padding:10px 18px; display:inline-flex; align-items:center; gap:10px;">
+                    <span style="font-size:22px;">⏱️</span>
+                    <div>
+                        <div style="font-size:11px; font-weight:800; color:#10b981; text-transform:uppercase; letter-spacing:0.5px;">EVALUATION TIME</div>
+                        <div style="font-size:15px; font-weight:700; color:var(--text-primary);">Completed in <strong style="color:#10b981;">{{ evaluation_time }}s</strong></div>
+                    </div>
+                </div>
+                {% endif %}
             </header>
 
             <div class="hero-actions">
                 {% if selected_platforms and selected_platforms|length == 1 %}
-                <a href="/download?platform={{ selected_platforms[0] }}&format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export Excel (.xlsx)</a>
-                <a href="/download?platform={{ selected_platforms[0] }}&format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export CSV (.csv)</a>
+                <a href="/download?platform={{ selected_platforms[0] }}&format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export All Tables (.xlsx)</a>
+                <a href="/download?platform={{ selected_platforms[0] }}&format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export All Tables (.csv)</a>
                 {% else %}
-                <a href="/download?format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export Excel (.xlsx)</a>
-                <a href="/download?format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export CSV (.csv)</a>
+                <a href="/download?format=xlsx" class="btn-download-excel" style="text-decoration:none; display:inline-flex; align-items:center;">📥 Export All Tables (.xlsx)</a>
+                <a href="/download?format=csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">📄 Export All Tables (.csv)</a>
                 {% endif %}
                 <a href="/" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center;">← Back to Analyzer</a>
             </div>
@@ -62,17 +73,33 @@
 
                 {% for block in contest_blocks %}
                 <div class="contest-table-card" style="margin-bottom: 28px; background: rgba(255,255,255,0.7); border:1px solid var(--card-border); border-radius:var(--radius-md); padding:20px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-                        <h4 style="font-family:'Outfit', sans-serif; font-size:1.15rem; font-weight:700; color:var(--text-primary); margin:0; display:flex; align-items:center; gap:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                        <h4 style="font-family:'Outfit', sans-serif; font-size:1.15rem; font-weight:700; color:var(--text-primary); margin:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <span class="badge">{{ title }}</span>
                             <span>🎯 {{ block.contest }}</span>
                             {% if block.date %}
                             <span style="font-size:12px; font-weight:600; color:var(--text-accent); background:rgba(43,140,255,0.08); padding:2px 8px; border-radius:999px;">📅 {{ block.date }}</span>
                             {% endif %}
                         </h4>
-                        <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">
-                            {{ block.rows|length }} Students Evaluated
-                        </span>
+                        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                            <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">
+                                {{ block.rows|length }} Students Evaluated
+                            </span>
+                            {% if block.rows %}
+                            <div class="table-export-actions" style="display:inline-flex; gap:8px;">
+                                <a href="/download?platform={{ title|lower }}&table_idx={{ loop.index0 }}&contest={{ block.contest|urlencode }}&format=xlsx" 
+                                   class="btn-table-export-excel" 
+                                   title="Export this unique {{ title }} {{ block.contest }} table to Excel (.xlsx)">
+                                    📥 Export Excel (.xlsx)
+                                </a>
+                                <a href="/download?platform={{ title|lower }}&table_idx={{ loop.index0 }}&contest={{ block.contest|urlencode }}&format=csv" 
+                                   class="btn-table-export-csv" 
+                                   title="Export this unique {{ title }} {{ block.contest }} table to CSV (.csv)">
+                                    📄 CSV
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
 
                     {% if block.rows %}

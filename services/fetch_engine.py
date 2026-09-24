@@ -225,7 +225,11 @@ class FetchEngine:
             else:
                 failed += 1
             if platform == "codechef":
-                time.sleep(1.2)
+                job["_cc_count"] = job.get("_cc_count", 0) + 1
+                if job["_cc_count"] % 5 == 0:
+                    time.sleep(20)  # 20 seconds gap after 5 CodeChef accounts
+                else:
+                    time.sleep(1.2)
             else:
                 time.sleep(1 / max(settings.MAX_CONCURRENT_FETCHES, 1))
 

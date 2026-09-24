@@ -144,44 +144,98 @@ class MemoryCollection:
         return None
 
 
+try:
+    from pymongo.errors import PyMongoError
+except Exception:
+    PyMongoError = Exception
+
+
 class MongoCollectionAdapter:
     def __init__(self, collection):
         self.collection = collection
+        self.memory = MemoryCollection(collection.name)
 
     def insert_one(self, doc):
-        return self.collection.insert_one(doc)
+        try:
+            res = self.collection.insert_one(doc)
+            try:
+                self.memory.insert_one(doc)
+            except Exception:
+                pass
+            return res
+        except PyMongoError as err:
+            logger.warning("MongoDB error in insert_one (%s), falling back to memory.", err)
+            return self.memory.insert_one(doc)
 
     def insert_many(self, docs):
-        return self.collection.insert_many(docs)
+        try:
+            res = self.collection.insert_many(docs)
+            try:
+                self.memory.insert_many(docs)
+            except Exception:
+                pass
+            return res
+        except PyMongoError as err:
+            logger.warning("MongoDB error in insert_many (%s), falling back to memory.", err)
+            return self.memory.insert_many(docs)
 
     def find(self, query=None, projection=None, sort=None, skip=0, limit=0):
-        cursor = self.collection.find(query or {}, projection)
-        if sort:
-            cursor = cursor.sort(sort)
-        if skip:
-            cursor = cursor.skip(skip)
-        if limit:
-            cursor = cursor.limit(limit)
-        return cursor
+        try:
+            cursor = self.collection.find(query or {}, projection)
+            if sort:
+                cursor = cursor.sort(sort)
+            if skip:
+                cursor = cursor.skip(skip)
+            if limit:
+                cursor = cursor.limit(limit)
+            return cursor
+        except PyMongoError as err:
+            logger.warning("MongoDB error in find (%s), falling back to memory.", err)
+            return self.memory.find(query=query, projection=projection, sort=sort, skip=skip, limit=limit)
 
     def find_one(self, query=None, projection=None, sort=None):
-        cursor = self.find(query=query, projection=projection, sort=sort, limit=1)
-        return next(iter(cursor), None)
+        try:
+            cursor = self.find(query=query, projection=projection, sort=sort, limit=1)
+            return next(iter(cursor), None)
+        except PyMongoError as err:
+            logger.warning("MongoDB error in find_one (%s), falling back to memory.", err)
+            return self.memory.find_one(query=query, projection=projection, sort=sort)
 
     def count_documents(self, query=None):
-        return self.collection.count_documents(query or {})
+        try:
+            return self.collection.count_documents(query or {})
+        except PyMongoError as err:
+            logger.warning("MongoDB error in count_documents (%s), falling back to memory.", err)
+            return self.memory.count_documents(query or {})
 
     def delete_many(self, query=None):
-        return self.collection.delete_many(query or {})
+        try:
+            self.memory.delete_many(query or {})
+            return self.collection.delete_many(query or {})
+        except PyMongoError as err:
+            logger.warning("MongoDB error in delete_many (%s), falling back to memory.", err)
+            return self.memory.delete_many(query or {})
 
     def update_one(self, query, update, upsert=False):
-        return self.collection.update_one(query, update, upsert=upsert)
+        try:
+            self.memory.update_one(query, update, upsert=upsert)
+            return self.collection.update_one(query, update, upsert=upsert)
+        except PyMongoError as err:
+            logger.warning("MongoDB error in update_one (%s), falling back to memory.", err)
+            return self.memory.update_one(query, update, upsert=upsert)
 
     def aggregate(self, pipeline):
-        return self.collection.aggregate(pipeline)
+        try:
+            return self.collection.aggregate(pipeline)
+        except PyMongoError as err:
+            logger.warning("MongoDB error in aggregate (%s), falling back to memory.", err)
+            return self.memory.aggregate(pipeline)
 
     def create_index(self, *args, **kwargs):
-        return self.collection.create_index(*args, **kwargs)
+        try:
+            return self.collection.create_index(*args, **kwargs)
+        except Exception:
+            return None
 
 
 class MongoStore:

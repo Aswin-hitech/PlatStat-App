@@ -192,3 +192,22 @@ def test_contest_service_features():
     contest_service.unsubscribe_reminder('test_user_c', 'lc_weekly_400')
     reminders_unsub = contest_service.reminder_repo.get_user_reminders('test_user_c')
     assert not any(r['contestId'] == 'lc_weekly_400' for r in reminders_unsub)
+
+
+def test_codechef_profile_cache():
+    import time
+    from services.codechef_service import _PROFILE_CACHE, fetch_codechef_profile, get_cc_summary
+
+    # Seed cache
+    fake_html = '<div class="rating-number">1750</div><script>var all_rating = [{"code": "START150", "name": "Starters 150", "rating": 1750, "rank": 20}];</script>'
+    _PROFILE_CACHE["test_user_cached"] = (time.time(), fake_html)
+
+    # Calling fetch should return cached HTML directly without network call
+    result_html = fetch_codechef_profile("test_user_cached")
+    assert result_html == fake_html
+
+    # get_cc_summary with cached profile
+    summary = get_cc_summary(1, "Test Student", "REG123", "CSE", "test_user_cached", target_contest_title="Starters 150")
+    assert summary["Current Rating"] == "1750"
+    assert summary["Global Rank"] == "20"
+

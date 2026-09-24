@@ -196,6 +196,13 @@ def get_latest_cc_contests(limit: int = 6) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Profile Cache  (5-minute TTL to avoid repeated hits when evaluating contests)
+# ---------------------------------------------------------------------------
+_PROFILE_CACHE: dict = {}   # username_lower -> (timestamp, html)
+_PROFILE_CACHE_TTL = 300    # 5 minutes
+
+
+# ---------------------------------------------------------------------------
 # Profile fetch  (session warm-up + retry)
 # ---------------------------------------------------------------------------
 def fetch_codechef_profile(username: str, max_retries: int = 3) -> str | None:
@@ -207,32 +214,61 @@ def fetch_codechef_profile(username: str, max_retries: int = 3) -> str | None:
       Use _is_valid_profile() to check whether the page actually has data.
     - Without the SESS cookie (set by _ensure_session_warm) the server
       stalls and times out.  The warm-up runs once per process.
+    - Results are cached for 5 minutes to prevent redundant requests when
+      evaluating multiple contests for the same student.
 
     Returns None only when the page could not be fetched at all (network
     error / all retries exhausted).
     """
+    if not username or not username.strip():
+        return None
+
+    clean_user = username.strip()
+    user_key = clean_user.lower()
+    now = time.time()
+
+    # Check cache first
+    cached_entry = _PROFILE_CACHE.get(user_key)
+    if cached_entry and (now - cached_entry[0] < _PROFILE_CACHE_TTL):
+        return cached_entry[1]
+
     _ensure_session_warm()
-    url = f"https://www.codechef.com/users/{username}"
+    url = f"https://www.codechef.com/users/{clean_user}"
 
     for attempt in range(max_retries):
         try:
             resp = _session.get(url, headers=_profile_headers(), timeout=20)
             if resp.status_code == 200:
-                return resp.text
-            if resp.status_code in (404, 403):
+                html = resp.text
+                if _is_valid_profile(html):
+                    _PROFILE_CACHE[user_key] = (now, html)
+                return html
+            if resp.status_code == 404:
                 return None
+            if resp.status_code == 403:
+                wait = 2.5 + attempt * 2.0 + random.uniform(0.2, 0.8)
+                print(f"[codechef] 403 Forbidden for '{clean_user}', cooling down {wait:.1f}s (attempt {attempt+1}/{max_retries})...")
+                time.sleep(wait)
+                try:
+                    _session.cookies.clear()
+                    global _session_warmed
+                    _session_warmed = False
+                    _ensure_session_warm()
+                except Exception:
+                    pass
+                continue
             if resp.status_code == 429:
-                wait = 2.0 + attempt * 1.5 + random.uniform(0.2, 0.8)
-                print(f"[codechef] rate-limited for {username}, waiting {wait:.1f}s")
+                wait = 4.0 + attempt * 3.0 + random.uniform(0.5, 1.5)
+                print(f"[codechef] rate-limited (429) for '{clean_user}', waiting {wait:.1f}s")
                 time.sleep(wait)
                 continue
         except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
-                wait = 1.5 * (attempt + 1) + random.uniform(0.1, 0.5)
-                print(f"[codechef] timeout for {username} (attempt {attempt+1}), retry in {wait:.1f}s")
+                wait = 2.0 * (attempt + 1) + random.uniform(0.2, 0.6)
+                print(f"[codechef] timeout for {clean_user} (attempt {attempt+1}), retry in {wait:.1f}s")
                 time.sleep(wait)
         except Exception as e:
-            print(f"[codechef] fetch error for '{username}' (attempt {attempt+1}): {e}")
+            print(f"[codechef] fetch error for '{clean_user}' (attempt {attempt+1}): {e}")
             if attempt < max_retries - 1:
                 time.sleep(1.0)
 
@@ -416,13 +452,14 @@ def get_cc_summary(
     user: str,
     target_contest_title: str | None = None,
     target_contest_date: str | None = None,
+    profile_html: str | None = None,
 ) -> dict:
     """
     Fetch and parse a CodeChef user profile, returning a flat summary dict
     ready for spreadsheet export.
 
     Data sourcing strategy:
-      1. Fetch profile HTML (session-warmed, with retry).
+      1. Fetch profile HTML (session-warmed, with retry, or pre-fetched).
       2. Detect invalid users via _is_valid_profile(); return AB row if bad.
       3. Parse all_rating JS array (PRIMARY) for rating, rank, contest history.
       4. Parse HTML selectors / regex (SECONDARY) for stars, division,
@@ -462,7 +499,7 @@ def get_cc_summary(
     # ------------------------------------------------------------------
     # Step 1 – fetch HTML
     # ------------------------------------------------------------------
-    html = fetch_codechef_profile(user.strip())
+    html = profile_html if profile_html is not None else fetch_codechef_profile(user.strip())
     if not html:
         print(f"[codechef] could not fetch profile for '{user}' (network failure)")
         return row

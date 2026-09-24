@@ -461,12 +461,56 @@
             });
         });
 
+        let evalTimerInterval = null;
+
         function startFetch(classId) {
             if (confirm("Fetch and evaluate live stats for all students in this class across Codeforces, CodeChef, and LeetCode?")) {
-                const toast = document.createElement('div');
-                toast.className = 'completion-toast-banner';
-                toast.innerHTML = '<strong>⚡ Fetching In Progress:</strong> Evaluating live coding profiles. Please wait...';
-                document.body.appendChild(toast);
+                const count = {{ students|length }};
+                const batches = Math.ceil(count / 5);
+                const gaps = Math.max(0, batches - 1);
+                const estSeconds = Math.max(5, (gaps * 20) + Math.round(count * 1.5) + 5);
+
+                const modal = document.getElementById('eval_time_modal');
+                if (modal) {
+                    const estMins = String(Math.floor(estSeconds / 60)).padStart(2, '0');
+                    const estSecs = String(estSeconds % 60).padStart(2, '0');
+                    document.getElementById('eval_eta_digits').textContent = `~${estMins}:${estSecs}`;
+                    document.getElementById('eval_remaining_text').textContent = `~${estSeconds}s`;
+                    modal.style.display = 'flex';
+
+                    let elapsed = 0;
+                    if (evalTimerInterval) clearInterval(evalTimerInterval);
+                    evalTimerInterval = setInterval(() => {
+                        elapsed++;
+                        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                        const secs = String(elapsed % 60).padStart(2, '0');
+                        document.getElementById('eval_elapsed_digits').textContent = `${mins}:${secs}`;
+
+                        const rem = Math.max(0, estSeconds - elapsed);
+                        if (rem > 0) {
+                            const remM = String(Math.floor(rem / 60)).padStart(2, '0');
+                            const remS = String(rem % 60).padStart(2, '0');
+                            document.getElementById('eval_remaining_text').textContent = `~${remM}:${remS}`;
+                        } else {
+                            document.getElementById('eval_remaining_text').textContent = `Finalizing output...`;
+                        }
+
+                        const pct = Math.min(96, Math.max(4, Math.round((elapsed / estSeconds) * 92)));
+                        document.getElementById('eval_progress_bar').style.width = `${pct}%`;
+                        document.getElementById('eval_percent_text').textContent = `${pct}%`;
+
+                        if (elapsed >= 2) {
+                            const s1 = document.getElementById('step_connect');
+                            const s2 = document.getElementById('step_fetch');
+                            if (s1 && s2) { s1.classList.remove('active'); s1.classList.add('done'); s2.classList.add('active'); }
+                        }
+                        if (elapsed >= Math.round(estSeconds * 0.75)) {
+                            const s2 = document.getElementById('step_fetch');
+                            const s3 = document.getElementById('step_compute');
+                            if (s2 && s3) { s2.classList.remove('active'); s2.classList.add('done'); s3.classList.add('active'); }
+                        }
+                    }, 1000);
+                }
 
                 fetch(`/api/classes/${classId}/fetch`, {
                     method: 'POST',
@@ -475,7 +519,9 @@
                 })
                 .then(resp => resp.json())
                 .then(res => {
-                    toast.remove();
+                    if (evalTimerInterval) clearInterval(evalTimerInterval);
+                    if (modal) modal.style.display = 'none';
+
                     if (res.error) {
                         alert('Fetch Error: ' + res.error);
                     } else {
@@ -484,7 +530,8 @@
                     }
                 })
                 .catch(err => {
-                    toast.remove();
+                    if (evalTimerInterval) clearInterval(evalTimerInterval);
+                    if (modal) modal.style.display = 'none';
                     console.error('Fetch error:', err);
                     alert('An error occurred during fetch.');
                 });
@@ -544,6 +591,67 @@
 
         document.addEventListener('DOMContentLoaded', loadNavNotifications);
     </script>
+
+    <!-- Evaluation Time Display & Progress Modal -->
+    <div id="eval_time_modal" class="eval-modal-backdrop" style="display:none;">
+        <div class="eval-modal-card">
+            <div class="eval-icon-pulse">
+                <span class="pulse-ring"></span>
+                <span class="eval-icon">⏱️</span>
+            </div>
+            <h3 class="eval-title">Class Evaluation in Progress</h3>
+            <p class="eval-subtitle" id="eval_subtitle">Fetching live student coding profiles & stats...</p>
+
+            <!-- Digital Time Display -->
+            <div class="eval-timer-box">
+                <div class="eval-timer-item">
+                    <span class="timer-label">ELAPSED TIME</span>
+                    <span class="timer-digits" id="eval_elapsed_digits">00:00</span>
+                </div>
+                <div class="timer-separator">/</div>
+                <div class="eval-timer-item">
+                    <span class="timer-label">ESTIMATED TIME</span>
+                    <span class="timer-digits" id="eval_eta_digits">~00:30</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="eval-progress-container">
+                <div class="eval-progress-bar" id="eval_progress_bar" style="width: 2%;"></div>
+            </div>
+            <div class="eval-progress-status">
+                <span>Est. Remaining: <strong id="eval_remaining_text">~30s</strong></span>
+                <span id="eval_percent_text">2%</span>
+            </div>
+
+            <!-- Safe Rate-Limit Notice for CodeChef -->
+            <div class="eval-notice-box" id="eval_notice_box">
+                <span class="notice-icon">🛡️</span>
+                <div class="notice-content">
+                    <strong>Anti-Block Safety Protocol Active:</strong>
+                    <span>CodeChef accounts are processed in batches of 5 with a 20-second safety gap to prevent platform IP rate-limiting and blocked accounts.</span>
+                </div>
+            </div>
+
+            <!-- Visual Steps Tracker -->
+            <div class="eval-steps-list">
+                <div class="eval-step active" id="step_connect">
+                    <span class="step-dot"></span>
+                    <span>Connecting to platform servers</span>
+                </div>
+                <div class="eval-step" id="step_fetch">
+                    <span class="step-dot"></span>
+                    <span>Fetching student profiles (5-account batches with 20s gaps)</span>
+                </div>
+                <div class="eval-step" id="step_compute">
+                    <span class="step-dot"></span>
+                    <span>Saving student statistics to database history</span>
+                </div>
+            </div>
+
+            <p class="eval-footer-tip">💡 Please keep this window open while evaluation completes.</p>
+        </div>
+    </div>
 </body>
 
 </html>
