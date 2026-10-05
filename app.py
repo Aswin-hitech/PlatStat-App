@@ -16,7 +16,7 @@ from parsers.excel_parser import parse_excel
 from repositories import ClassRepository
 from services.class_service import ClassService
 from services.codechef_service import get_cc_summary, get_latest_cc_contests, fetch_codechef_profile
-from services.codeforces_service import get_cf_summary, get_latest_cf_contests
+from services.codeforces_service import get_cf_summary, get_latest_cf_contests, prefetch_cf_users, resolve_cf_contest
 from services.contest_scheduler import contest_scheduler
 from services.contest_service import contest_service
 from services.leetcode_service import find_latest_lc_contest, get_lc_summary, get_latest_lc_contests
@@ -292,6 +292,18 @@ def _analyze_rows(rows, selected_platforms, lc_targets=None, cc_targets=None, cf
     max_workers = 10
 
     if "codeforces" in selected_platforms:
+        # Batch pre-fetch Codeforces user profiles in 1 call (up to 50 accounts per batch)
+        cf_handles = list(dict.fromkeys(
+            _clean_text(r.get("codeforces"))
+            for r in rows
+            if _clean_text(r.get("codeforces")) and _clean_text(r.get("name") or r.get("studentName"))
+        ))
+        if cf_handles:
+            try:
+                prefetch_cf_users(cf_handles)
+            except Exception as e:
+                print(f"[codeforces] Pre-fetch error: {e}")
+
         for cf_t in (cf_targets or [{"title": None, "id": None, "date": None}]):
             c_title = cf_t.get("title") or (str(cf_t.get("id")) if cf_t.get("id") else "General Summary")
             eligible = []
@@ -714,16 +726,14 @@ def index():
             cf_vals = [request.form.get("codeforces_contest").strip()]
 
         if cf_vals:
-            try:
-                cf_contests = get_latest_cf_contests(15)
-                for val in cf_vals:
-                    matched_cf = next((c for c in cf_contests if c["title"] == val or str(c.get("id")) == val), None)
-                    if matched_cf:
-                        cf_targets.append({"title": matched_cf["title"], "id": matched_cf.get("id"), "date": matched_cf.get("date")})
+            for val in cf_vals:
+                try:
+                    c_id, c_title, c_date = resolve_cf_contest(val)
+                    if c_id:
+                        cf_targets.append({"title": c_title, "id": c_id, "date": c_date})
                     else:
                         cf_targets.append({"title": val, "id": val, "date": None})
-            except Exception:
-                for val in cf_vals:
+                except Exception:
                     cf_targets.append({"title": val, "id": val, "date": None})
 
     uploaded_file = request.files.get("csvfile")
