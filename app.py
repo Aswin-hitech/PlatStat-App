@@ -635,7 +635,7 @@ def favicon():
 @app.route("/api/leetcode/contests", methods=["GET"])
 def api_leetcode_contests():
     try:
-        contests = get_latest_lc_contests(6)
+        contests = get_latest_lc_contests(15)
         return jsonify({"contests": contests})
     except Exception as e:
         return jsonify({"error": f"Failed to fetch LeetCode contests from API: {str(e)}", "contests": []}), 500
@@ -644,7 +644,7 @@ def api_leetcode_contests():
 @app.route("/api/codechef/contests", methods=["GET"])
 def api_codechef_contests():
     try:
-        contests = get_latest_cc_contests(6)
+        contests = get_latest_cc_contests(15)
         return jsonify({"contests": contests})
     except Exception as e:
         return jsonify({"error": f"Failed to fetch CodeChef contests from API: {str(e)}", "contests": []}), 500
@@ -653,7 +653,7 @@ def api_codechef_contests():
 @app.route("/api/codeforces/contests", methods=["GET"])
 def api_codeforces_contests():
     try:
-        contests = get_latest_cf_contests(6)
+        contests = get_latest_cf_contests(15)
         return jsonify({"contests": contests})
     except Exception as e:
         return jsonify({"error": f"Failed to fetch Codeforces contests from API: {str(e)}", "contests": []}), 500

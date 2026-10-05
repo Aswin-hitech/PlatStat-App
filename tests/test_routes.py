@@ -310,4 +310,41 @@ def test_cache_persistence_and_fallback():
     assert loaded["codeforces"][0]["contest"] == "Round 999"
 
 
+def test_platform_contest_apis(client, monkeypatch):
+    import app as app_module
+
+    # Mock 20 contests for each platform
+    monkeypatch.setattr(
+        app_module,
+        "get_latest_lc_contests",
+        lambda limit=15: [{"title": f"LC Contest {i}", "titleSlug": f"lc-{i}", "date": "2026-10-01"} for i in range(limit)]
+    )
+    monkeypatch.setattr(
+        app_module,
+        "get_latest_cc_contests",
+        lambda limit=15: [{"title": f"CC Contest {i}", "code": f"cc_{i}", "date": "2026-10-01"} for i in range(limit)]
+    )
+    monkeypatch.setattr(
+        app_module,
+        "get_latest_cf_contests",
+        lambda limit=15: [{"title": f"CF Contest {i}", "id": i, "code": str(i), "date": "2026-10-01"} for i in range(limit)]
+    )
+
+    # Test LeetCode endpoint
+    resp_lc = client.get("/api/leetcode/contests")
+    assert resp_lc.status_code == 200
+    assert len(resp_lc.get_json()["contests"]) == 15
+
+    # Test CodeChef endpoint
+    resp_cc = client.get("/api/codechef/contests")
+    assert resp_cc.status_code == 200
+    assert len(resp_cc.get_json()["contests"]) == 15
+
+    # Test Codeforces endpoint
+    resp_cf = client.get("/api/codeforces/contests")
+    assert resp_cf.status_code == 200
+    assert len(resp_cf.get_json()["contests"]) == 15
+
+
+
 

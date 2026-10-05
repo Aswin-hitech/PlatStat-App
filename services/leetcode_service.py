@@ -8,7 +8,7 @@ _LC_CONTESTS_CACHE = {"data": None, "timestamp": 0}
 _CACHE_TTL_SECONDS = 300
 
 
-def get_latest_lc_contests(limit=6):
+def get_latest_lc_contests(limit=15):
     """Fetch the latest `limit` past LeetCode contests from the LeetCode GraphQL API with 5-min caching.
 
     Returns a list of dicts:

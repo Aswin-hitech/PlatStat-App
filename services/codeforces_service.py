@@ -20,7 +20,7 @@ _CF_CACHE_TTL_SECONDS = 300
 _CF_SESSION = requests.Session()
 
 
-def get_latest_cf_contests(limit=6):
+def get_latest_cf_contests(limit=15):
     """Fetch the latest finished Codeforces contests with title, id, code, and date (5-min caching)."""
     now = int(time.time())
     if _CF_CONTESTS_CACHE["data"] and (now - _CF_CONTESTS_CACHE["timestamp"] < _CF_CACHE_TTL_SECONDS):

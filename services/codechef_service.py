@@ -138,7 +138,7 @@ _CC_CONTESTS_CACHE: dict = {"data": None, "timestamp": 0}
 _CC_CACHE_TTL = 300   # 5 minutes
 
 
-def get_latest_cc_contests(limit: int = 6) -> list[dict]:
+def get_latest_cc_contests(limit: int = 15) -> list[dict]:
     """
     Return up to *limit* recent past CodeChef contests (Starters + Monday
     Munch / DSA only), with a 5-minute in-process cache.
@@ -153,7 +153,7 @@ def get_latest_cc_contests(limit: int = 6) -> list[dict]:
 
     url = (
         "https://www.codechef.com/api/list/contests/all"
-        "?sort_by=END&sorting_order=desc&offset=0&limit=60"
+        "?sort_by=END&sorting_order=desc&offset=0&limit=100"
     )
     try:
         r = _session.get(
